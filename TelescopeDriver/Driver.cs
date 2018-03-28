@@ -106,7 +106,7 @@ namespace ASCOM.EqPlatformAdapter
         /// </summary>
         public Telescope()
         {
-            //s_csDriverID = Marshal.GenerateProgIdForType(this.GetType());
+            driverID = Marshal.GenerateProgIdForType(this.GetType());
 
             tl = new TraceLogger("", "EqPlatformAdapter");
             ReadProfile(); // Read device configuration from the ASCOM Profile store
