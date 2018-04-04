@@ -33,8 +33,6 @@ using System.Text;
 using System.Runtime.InteropServices;
 
 using ASCOM;
-using ASCOM.Astrometry;
-using ASCOM.Astrometry.AstroUtils;
 using ASCOM.Utilities;
 using ASCOM.DeviceInterface;
 using System.Globalization;
@@ -82,16 +80,6 @@ namespace ASCOM.EqPlatformAdapter
         private ASCOM.DriverAccess.Camera m_camera;
 
         /// <summary>
-        /// Private variable to hold an ASCOM Utilities object
-        /// </summary>
-        private Util utilities;
-
-        /// <summary>
-        /// Private variable to hold an ASCOM AstroUtilities object to provide the Range method
-        /// </summary>
-        private AstroUtils astroUtilities;
-
-        /// <summary>
         /// Variable to hold the trace logger object (creates a diagnostic log file with information that you specify)
         /// </summary>
         internal TraceLogger tl;
@@ -108,10 +96,6 @@ namespace ASCOM.EqPlatformAdapter
             ReadProfile(); // Read device configuration from the ASCOM Profile store
 
             tl.LogMessage("Camera", "Starting initialisation");
-
-            utilities = new Util(); //Initialise util object
-            astroUtilities = new AstroUtils(); // Initialise astro utilities object
-            //TODO: Implement your additional construction here
 
             tl.LogMessage("Camera", "Completed initialisation");
         }
@@ -131,11 +115,6 @@ namespace ASCOM.EqPlatformAdapter
         /// </summary>
         public void SetupDialog()
         {
-            // consider only showing the setup dialog if not connected
-            // or call a different dialog if connected
-            if (IsConnected)
-                System.Windows.Forms.MessageBox.Show("Already connected, just press OK");
-
             using (SetupDialogForm F = new SetupDialogForm(this))
             {
                 var result = F.ShowDialog();
@@ -150,45 +129,33 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("SupportedActions Get", "Returning empty arraylist");
-                return new ArrayList();
+                CheckConnected();
+                return m_camera.SupportedActions;
             }
         }
 
         public string Action(string actionName, string actionParameters)
         {
-            LogMessage("", "Action {0}, parameters {1} not implemented", actionName, actionParameters);
-            throw new ASCOM.ActionNotImplementedException("Action " + actionName + " is not implemented by this driver");
+            CheckConnected();
+            return m_camera.Action(actionName, actionParameters);
         }
 
         public void CommandBlind(string command, bool raw)
         {
-            CheckConnected("CommandBlind");
-            // Call CommandString and return as soon as it finishes
-            this.CommandString(command, raw);
-            // or
-            throw new ASCOM.MethodNotImplementedException("CommandBlind");
-            // DO NOT have both these sections!  One or the other
+            CheckConnected();
+            m_camera.CommandBlind(command, raw);
         }
 
         public bool CommandBool(string command, bool raw)
         {
-            CheckConnected("CommandBool");
-            string ret = CommandString(command, raw);
-            // TODO decode the return string and return true or false
-            // or
-            throw new ASCOM.MethodNotImplementedException("CommandBool");
-            // DO NOT have both these sections!  One or the other
+            CheckConnected();
+            return m_camera.CommandBool(command, raw);
         }
 
         public string CommandString(string command, bool raw)
         {
-            CheckConnected("CommandString");
-            // it's a good idea to put all the low level communication with the device here,
-            // then all communication calls this function
-            // you need something to ensure that only one command is in progress at a time
-
-            throw new ASCOM.MethodNotImplementedException("CommandString");
+            CheckConnected();
+            return m_camera.CommandString(command, raw);
         }
 
         public void Dispose()
@@ -199,15 +166,8 @@ namespace ASCOM.EqPlatformAdapter
                 m_camera = null;
             }
 
-            // Clean up the tracelogger and util objects
-
             SharedResources.PutTraceLogger();
             tl = null;
-
-            utilities.Dispose();
-            utilities = null;
-            astroUtilities.Dispose();
-            astroUtilities = null;
         }
 
         public bool Connected
@@ -237,10 +197,8 @@ namespace ASCOM.EqPlatformAdapter
 
         public string Description
         {
-            // TODO customise this device description
             get
             {
-                tl.LogMessage("Description Get", driverDescription);
                 return driverDescription;
             }
         }
@@ -250,9 +208,7 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 Version version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-                // TODO customise this driver description
-                string driverInfo = "Information about the driver itself. Version: " + String.Format(CultureInfo.InvariantCulture, "{0}.{1}", version.Major, version.Minor);
-                tl.LogMessage("DriverInfo Get", driverInfo);
+                string driverInfo = driverDescription + " Version: " + String.Format(CultureInfo.InvariantCulture, "{0}.{1}", version.Major, version.Minor);
                 return driverInfo;
             }
         }
@@ -263,7 +219,6 @@ namespace ASCOM.EqPlatformAdapter
             {
                 Version version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 string driverVersion = String.Format(CultureInfo.InvariantCulture, "{0}.{1}", version.Major, version.Minor);
-                tl.LogMessage("DriverVersion Get", driverVersion);
                 return driverVersion;
             }
         }
@@ -273,7 +228,6 @@ namespace ASCOM.EqPlatformAdapter
             // set by the driver wizard
             get
             {
-                LogMessage("InterfaceVersion Get", "2");
                 return Convert.ToInt16("2");
             }
         }
@@ -282,8 +236,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                string name = "Short driver name - please customise";
-                tl.LogMessage("Name Get", name);
+                string name = "EQ Platform Adapter driver Camera Device";
                 return name;
             }
         }
@@ -292,32 +245,18 @@ namespace ASCOM.EqPlatformAdapter
 
         #region ICamera Implementation
 
-        private const int ccdWidth = 1394; // Constants to define the ccd pixel dimenstions
-        private const int ccdHeight = 1040;
-        private const double pixelSize = 6.45; // Constant for the pixel physical dimension
-
-        private int cameraNumX = ccdWidth; // Initialise variables to hold values required for functionality tested by Conform
-        private int cameraNumY = ccdHeight;
-        private int cameraStartX = 0;
-        private int cameraStartY = 0;
-        private DateTime exposureStart = DateTime.MinValue;
-        private double cameraLastExposureDuration = 0.0;
-        private bool cameraImageReady = false;
-        private int[,] cameraImageArray;
-        private object[,] cameraImageArrayVariant;
-
         public void AbortExposure()
         {
-            tl.LogMessage("AbortExposure", "Not implemented");
-            throw new MethodNotImplementedException("AbortExposure");
+            if (IsConnected)
+                m_camera.AbortExposure();
         }
 
         public short BayerOffsetX
         {
             get
             {
-                tl.LogMessage("BayerOffsetX Get Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("BayerOffsetX", false);
+                CheckConnected();
+                return m_camera.BayerOffsetX;
             }
         }
 
@@ -325,8 +264,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("BayerOffsetY Get Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("BayerOffsetX", true);
+                CheckConnected();
+                return m_camera.BayerOffsetY;
             }
         }
 
@@ -334,13 +273,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("BinX Get", "1");
-                return 1;
+                CheckConnected();
+                return m_camera.BinX;
             }
             set
             {
-                tl.LogMessage("BinX Set", value.ToString());
-                if (value != 1) throw new ASCOM.InvalidValueException("BinX", value.ToString(), "1"); // Only 1 is valid in this simple template
+                CheckConnected();
+                m_camera.BinX = value;
             }
         }
 
@@ -348,13 +287,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("BinY Get", "1");
-                return 1;
+                CheckConnected();
+                return m_camera.BinY;
             }
             set
             {
-                tl.LogMessage("BinY Set", value.ToString());
-                if (value != 1) throw new ASCOM.InvalidValueException("BinY", value.ToString(), "1"); // Only 1 is valid in this simple template
+                CheckConnected();
+                m_camera.BinY = value;
             }
         }
 
@@ -362,8 +301,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CCDTemperature Get Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("CCDTemperature", false);
+                CheckConnected();
+                return m_camera.CCDTemperature;
             }
         }
 
@@ -371,8 +310,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CameraState Get", CameraStates.cameraIdle.ToString());
-                return CameraStates.cameraIdle;
+                CheckConnected();
+                return m_camera.CameraState;
             }
         }
 
@@ -380,8 +319,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CameraXSize Get", ccdWidth.ToString());
-                return ccdWidth;
+                CheckConnected();
+                return m_camera.CameraXSize;
             }
         }
 
@@ -389,8 +328,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CameraYSize Get", ccdHeight.ToString());
-                return ccdHeight;
+                CheckConnected();
+                return m_camera.CameraYSize;
             }
         }
 
@@ -398,8 +337,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanAbortExposure Get", false.ToString());
-                return false;
+                CheckConnected();
+                return m_camera.CanAbortExposure;
             }
         }
 
@@ -407,8 +346,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanAsymmetricBin Get", false.ToString());
-                return false;
+                CheckConnected();
+                return m_camera.CanAsymmetricBin;
             }
         }
 
@@ -416,8 +355,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanFastReadout Get", false.ToString());
-                return false;
+                CheckConnected();
+                return m_camera.CanFastReadout;
             }
         }
 
@@ -425,8 +364,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanGetCoolerPower Get", false.ToString());
-                return false;
+                CheckConnected();
+                return m_camera.CanGetCoolerPower;
             }
         }
 
@@ -434,6 +373,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                // explicitly return false .. we don't want any pulse guide commands delegated to the camera
+                // interfering with the guide commands being issued via the Telescope device
                 tl.LogMessage("CanPulseGuide Get", false.ToString());
                 return false;
             }
@@ -443,8 +384,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSetCCDTemperature Get", false.ToString());
-                return false;
+                CheckConnected();
+                return m_camera.CanSetCCDTemperature;
             }
         }
 
@@ -452,8 +393,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanStopExposure Get", false.ToString());
-                return false;
+                CheckConnected();
+                return m_camera.CanStopExposure;
             }
         }
 
@@ -461,13 +402,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CoolerOn Get Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("CoolerOn", false);
+                CheckConnected();
+                return m_camera.CoolerOn;
             }
             set
             {
-                tl.LogMessage("CoolerOn Set Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("CoolerOn", true);
+                CheckConnected();
+                m_camera.CoolerOn = value;
             }
         }
 
@@ -475,8 +416,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CoolerPower Get Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("CoolerPower", false);
+                CheckConnected();
+                return m_camera.CoolerPower;
             }
         }
 
@@ -484,8 +425,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("ElectronsPerADU Get Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ElectronsPerADU", false);
+                CheckConnected();
+                return m_camera.ElectronsPerADU;
             }
         }
 
@@ -493,8 +434,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("ExposureMax Get Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ExposureMax", false);
+                CheckConnected();
+                return m_camera.ExposureMax;
             }
         }
 
@@ -502,8 +443,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("ExposureMin Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ExposureMin", false);
+                CheckConnected();
+                return m_camera.ExposureMin;
             }
         }
 
@@ -511,8 +452,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("ExposureResolution Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ExposureResolution", false);
+                CheckConnected();
+                return m_camera.ExposureResolution;
             }
         }
 
@@ -520,13 +461,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("FastReadout Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("FastReadout", false);
+                CheckConnected();
+                return m_camera.FastReadout;
             }
             set
             {
-                tl.LogMessage("FastReadout Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("FastReadout", true);
+                CheckConnected();
+                m_camera.FastReadout = value;
             }
         }
 
@@ -534,8 +475,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("FullWellCapacity Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("FullWellCapacity", false);
+                CheckConnected();
+                return m_camera.FullWellCapacity;
             }
         }
 
@@ -543,13 +484,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("Gain Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Gain", false);
+                CheckConnected();
+                return m_camera.Gain;
             }
             set
             {
-                tl.LogMessage("Gain Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Gain", true);
+                CheckConnected();
+                m_camera.Gain = value;
             }
         }
 
@@ -557,8 +498,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("GainMax Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("GainMax", false);
+                CheckConnected();
+                return m_camera.GainMax;
             }
         }
 
@@ -566,8 +507,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("GainMin Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("GainMin", true);
+                CheckConnected();
+                return m_camera.GainMin;
             }
         }
 
@@ -575,8 +516,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("Gains Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Gains", true);
+                CheckConnected();
+                return m_camera.Gains;
             }
         }
 
@@ -584,8 +525,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("HasShutter Get", false.ToString());
-                return false;
+                CheckConnected();
+                return m_camera.HasShutter;
             }
         }
 
@@ -593,8 +534,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("HeatSinkTemperature Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("HeatSinkTemperature", false);
+                CheckConnected();
+                return m_camera.HeatSinkTemperature;
             }
         }
 
@@ -602,14 +543,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                if (!cameraImageReady)
-                {
-                    tl.LogMessage("ImageArray Get", "Throwing InvalidOperationException because of a call to ImageArray before the first image has been taken!");
-                    throw new ASCOM.InvalidOperationException("Call to ImageArray before the first image has been taken!");
-                }
-
-                cameraImageArray = new int[cameraNumX, cameraNumY];
-                return cameraImageArray;
+                CheckConnected();
+                return m_camera.ImageArray;
             }
         }
 
@@ -617,22 +552,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                if (!cameraImageReady)
-                {
-                    tl.LogMessage("ImageArrayVariant Get", "Throwing InvalidOperationException because of a call to ImageArrayVariant before the first image has been taken!");
-                    throw new ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!");
-                }
-                cameraImageArrayVariant = new object[cameraNumX, cameraNumY];
-                for (int i = 0; i < cameraImageArray.GetLength(1); i++)
-                {
-                    for (int j = 0; j < cameraImageArray.GetLength(0); j++)
-                    {
-                        cameraImageArrayVariant[j, i] = cameraImageArray[j, i];
-                    }
-
-                }
-
-                return cameraImageArrayVariant;
+                CheckConnected();
+                return m_camera.ImageArrayVariant;
             }
         }
 
@@ -640,8 +561,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("ImageReady Get", cameraImageReady.ToString());
-                return cameraImageReady;
+                CheckConnected();
+                return m_camera.ImageReady;
             }
         }
 
@@ -649,6 +570,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                // not implemented (no pulse guiding via the camera interface)
                 tl.LogMessage("IsPulseGuiding Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("IsPulseGuiding", false);
             }
@@ -658,13 +580,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                if (!cameraImageReady)
-                {
-                    tl.LogMessage("LastExposureDuration Get", "Throwing InvalidOperationException because of a call to LastExposureDuration before the first image has been taken!");
-                    throw new ASCOM.InvalidOperationException("Call to LastExposureDuration before the first image has been taken!");
-                }
-                tl.LogMessage("LastExposureDuration Get", cameraLastExposureDuration.ToString());
-                return cameraLastExposureDuration;
+                CheckConnected();
+                return m_camera.LastExposureDuration;
             }
         }
 
@@ -672,14 +589,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                if (!cameraImageReady)
-                {
-                    tl.LogMessage("LastExposureStartTime Get", "Throwing InvalidOperationException because of a call to LastExposureStartTime before the first image has been taken!");
-                    throw new ASCOM.InvalidOperationException("Call to LastExposureStartTime before the first image has been taken!");
-                }
-                string exposureStartString = exposureStart.ToString("yyyy-MM-ddTHH:mm:ss");
-                tl.LogMessage("LastExposureStartTime Get", exposureStartString.ToString());
-                return exposureStartString;
+                CheckConnected();
+                return m_camera.LastExposureStartTime;
             }
         }
 
@@ -687,8 +598,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("MaxADU Get", "20000");
-                return 20000;
+                CheckConnected();
+                return m_camera.MaxADU;
             }
         }
 
@@ -696,8 +607,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("MaxBinX Get", "1");
-                return 1;
+                CheckConnected();
+                return m_camera.MaxBinX;
             }
         }
 
@@ -705,8 +616,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("MaxBinY Get", "1");
-                return 1;
+                CheckConnected();
+                return m_camera.MaxBinY;
             }
         }
 
@@ -714,13 +625,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("NumX Get", cameraNumX.ToString());
-                return cameraNumX;
+                CheckConnected();
+                return m_camera.NumX;
             }
             set
             {
-                cameraNumX = value;
-                tl.LogMessage("NumX set", value.ToString());
+                CheckConnected();
+                m_camera.NumX = value;
             }
         }
 
@@ -728,13 +639,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("NumY Get", cameraNumY.ToString());
-                return cameraNumY;
+                CheckConnected();
+                return m_camera.NumY;
             }
             set
             {
-                cameraNumY = value;
-                tl.LogMessage("NumY set", value.ToString());
+                CheckConnected();
+                m_camera.NumY = value;
             }
         }
 
@@ -742,8 +653,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("PercentCompleted Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("PercentCompleted", false);
+                CheckConnected();
+                return m_camera.PercentCompleted;
             }
         }
 
@@ -751,8 +662,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("PixelSizeX Get", pixelSize.ToString());
-                return pixelSize;
+                CheckConnected();
+                return m_camera.PixelSizeX;
             }
         }
 
@@ -760,8 +671,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("PixelSizeY Get", pixelSize.ToString());
-                return pixelSize;
+                CheckConnected();
+                return m_camera.PixelSizeY;
             }
         }
 
@@ -775,13 +686,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("ReadoutMode Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ReadoutMode", false);
+                CheckConnected();
+                return m_camera.ReadoutMode;
             }
             set
             {
-                tl.LogMessage("ReadoutMode Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ReadoutMode", true);
+                CheckConnected();
+                m_camera.ReadoutMode = value;
             }
         }
 
@@ -789,8 +700,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("ReadoutModes Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ReadoutModes", false);
+                CheckConnected();
+                return m_camera.ReadoutModes;
             }
         }
 
@@ -798,8 +709,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("SensorName Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SensorName", false);
+                CheckConnected();
+                return m_camera.SensorName;
             }
         }
 
@@ -807,8 +718,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("SensorType Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SensorType", false);
+                CheckConnected();
+                return m_camera.SensorType;
             }
         }
 
@@ -816,42 +727,33 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("SetCCDTemperature Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SetCCDTemperature", false);
+                CheckConnected();
+                return m_camera.SetCCDTemperature;
             }
             set
             {
-                tl.LogMessage("SetCCDTemperature Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SetCCDTemperature", true);
+                CheckConnected();
+                m_camera.SetCCDTemperature = value;
             }
         }
 
         public void StartExposure(double Duration, bool Light)
         {
-            if (Duration < 0.0) throw new InvalidValueException("StartExposure", Duration.ToString(), "0.0 upwards");
-            if (cameraNumX > ccdWidth) throw new InvalidValueException("StartExposure", cameraNumX.ToString(), ccdWidth.ToString());
-            if (cameraNumY > ccdHeight) throw new InvalidValueException("StartExposure", cameraNumY.ToString(), ccdHeight.ToString());
-            if (cameraStartX > ccdWidth) throw new InvalidValueException("StartExposure", cameraStartX.ToString(), ccdWidth.ToString());
-            if (cameraStartY > ccdHeight) throw new InvalidValueException("StartExposure", cameraStartY.ToString(), ccdHeight.ToString());
-
-            cameraLastExposureDuration = Duration;
-            exposureStart = DateTime.Now;
-            System.Threading.Thread.Sleep((int)Duration * 1000);  // Sleep for the duration to simulate exposure 
-            tl.LogMessage("StartExposure", Duration.ToString() + " " + Light.ToString());
-            cameraImageReady = true;
+            CheckConnected();
+            m_camera.StartExposure(Duration, Light);
         }
 
         public int StartX
         {
             get
             {
-                tl.LogMessage("StartX Get", cameraStartX.ToString());
-                return cameraStartX;
+                CheckConnected();
+                return m_camera.StartX;
             }
             set
             {
-                cameraStartX = value;
-                tl.LogMessage("StartX Set", value.ToString());
+                CheckConnected();
+                m_camera.StartX = value;
             }
         }
 
@@ -859,20 +761,20 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("StartY Get", cameraStartY.ToString());
-                return cameraStartY;
+                CheckConnected();
+                return m_camera.StartY;
             }
             set
             {
-                cameraStartY = value;
-                tl.LogMessage("StartY set", value.ToString());
+                CheckConnected();
+                m_camera.StartY = value;
             }
         }
 
         public void StopExposure()
         {
-            tl.LogMessage("StopExposure", "Not implemented");
-            throw new MethodNotImplementedException("StopExposure");
+            CheckConnected();
+            m_camera.StopExposure();
         }
 
         #endregion
@@ -902,6 +804,11 @@ namespace ASCOM.EqPlatformAdapter
             {
                 throw new ASCOM.NotConnectedException(message);
             }
+        }
+
+        private void CheckConnected()
+        {
+            CheckConnected("Not connected");
         }
 
         /// <summary>

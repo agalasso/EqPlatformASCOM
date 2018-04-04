@@ -45,6 +45,8 @@ namespace ASCOM.EqPlatformAdapter
                     string val = chooser.Choose(camId);
                     if (val != null && val.Length != 0 && val != camId)
                     {
+                        if (val == SharedResources.CamDriverId)
+                            return; // reject choice of this driver!
                         string camName = profile.GetValue(val, string.Empty, string.Empty, val);
                         profile.WriteValue(SharedResources.CamDriverId, "cameraId", val);
                         profile.WriteValue(SharedResources.CamDriverId, "cameraName", camName);
@@ -126,6 +128,8 @@ namespace ASCOM.EqPlatformAdapter
                     string val = chooser.Choose(scopeId);
                     if (val != null && val.Length != 0 && val != scopeId)
                     {
+                        if (val == SharedResources.ScopeDriverId)
+                            return; // reject choice of this driver!
                         string scopeName = profile.GetValue(val, string.Empty, string.Empty, val);
                         profile.WriteValue(SharedResources.ScopeDriverId, "scopeId", val);
                         profile.WriteValue(SharedResources.ScopeDriverId, "scopeName", scopeName);
@@ -191,15 +195,18 @@ namespace ASCOM.EqPlatformAdapter
         public void UpdateState()
         {
             bool cam_connected = SharedResources.CameraConnected;
-            this.chooseCam.Enabled = !cam_connected;
-            this.setupCam.Enabled = !cam_connected;
-
             bool mount_connected = SharedResources.MountConnected;
-            this.chooseMount.Enabled = !mount_connected;
-            this.setupMount.Enabled = !mount_connected;
-            this.chooseSwitch.Enabled = !mount_connected;
-            this.setupSwitch.Enabled = !mount_connected;
-            this.switchIds.Enabled = !mount_connected;
+
+            bool enable_cam = !cam_connected && !mount_connected;
+            this.chooseCam.Enabled = enable_cam;
+            this.setupCam.Enabled = enable_cam;
+
+            bool enable_mount = !mount_connected;
+            this.chooseMount.Enabled = enable_mount;
+            this.setupMount.Enabled = enable_mount;
+            this.chooseSwitch.Enabled = enable_mount;
+            this.setupSwitch.Enabled = enable_mount;
+            this.switchIds.Enabled = enable_mount;
         }
     }
 }

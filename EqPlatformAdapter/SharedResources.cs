@@ -114,6 +114,25 @@ namespace ASCOM.EqPlatformAdapter
                 if (s_cam_connections == 0)
                 {
                     s_camera.Connected = true;
+                    try
+                    {
+                        if (!s_camera.CanPulseGuide)
+                            throw new ASCOM.DriverException("The selected camera does not support pulse guiding");
+                    }
+                    catch (Exception)
+                    {
+                        try
+                        {
+                            s_camera.Connected = false;
+                        }
+                        catch (Exception)
+                        {
+                            // ignore
+                        }
+                        s_camera.Dispose();
+                        s_camera = null;
+                        throw;
+                    }
                     updateForm = true;
                 }
 
