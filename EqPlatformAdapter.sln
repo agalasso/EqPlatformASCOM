@@ -10,6 +10,9 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CameraDriver", "CameraDriver\CameraDriver.csproj", "{77849CDD-8C25-43A1-93BF-BCE16C720C12}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestForm", "TestForm\TestForm.csproj", "{8E8D406C-1838-4914-867D-AB602D0EAF3E}"
+	ProjectSection(ProjectDependencies) = postProject
+		{3689A2CB-94C5-4012-A5CF-7E7D1DD27143} = {3689A2CB-94C5-4012-A5CF-7E7D1DD27143}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

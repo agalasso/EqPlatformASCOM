@@ -13,8 +13,11 @@ namespace ASCOM.EqPlatformAdapter
     [ComVisible(false)]					// Form not registered for COM!
     public partial class SetupDialogForm : Form
     {
-        public SetupDialogForm()
+        Telescope m_scope;
+
+        public SetupDialogForm(Telescope scope)
         {
+            m_scope = scope;
             InitializeComponent();
             // Initialise current values of user settings from the ASCOM Profile
             InitUI();
@@ -24,8 +27,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             // Place any validation constraint checks here
             // Update the state variables with results from the dialogue
-            Telescope.comPort = (string)comboBoxComPort.SelectedItem;
-            Telescope.tl.Enabled = chkTrace.Checked;
+            m_scope.tl.Enabled = chkTrace.Checked;
         }
 
         private void cmdCancel_Click(object sender, EventArgs e) // Cancel button event handler
@@ -52,15 +54,7 @@ namespace ASCOM.EqPlatformAdapter
 
         private void InitUI()
         {
-            chkTrace.Checked = Telescope.tl.Enabled;
-            // set the list of com ports to those that are currently available
-            comboBoxComPort.Items.Clear();
-            comboBoxComPort.Items.AddRange(System.IO.Ports.SerialPort.GetPortNames());      // use System.IO because it's static
-            // select the current port if possible
-            if (comboBoxComPort.Items.Contains(Telescope.comPort))
-            {
-                comboBoxComPort.SelectedItem = Telescope.comPort;
-            }
+            chkTrace.Checked = m_scope.tl.Enabled;
         }
     }
 }

@@ -73,17 +73,13 @@ namespace ASCOM.EqPlatformAdapter
         /// </summary>
         private static string driverDescription = "ASCOM Camera Driver for Equatorial Platform Adapter.";
 
-        internal static string comPortProfileName = "COM Port"; // Constants used for Profile persistence
-        internal static string comPortDefault = "COM1";
         internal static string traceStateProfileName = "Trace Level";
         internal static string traceStateDefault = "false";
-
-        internal static string comPort; // Variables to hold the currrent device configuration
 
         /// <summary>
         /// Private variable to hold the connected state
         /// </summary>
-        private bool connectedState;
+        private ASCOM.DriverAccess.Camera m_camera;
 
         /// <summary>
         /// Private variable to hold an ASCOM Utilities object
@@ -98,7 +94,7 @@ namespace ASCOM.EqPlatformAdapter
         /// <summary>
         /// Variable to hold the trace logger object (creates a diagnostic log file with information that you specify)
         /// </summary>
-        internal static TraceLogger tl;
+        internal TraceLogger tl;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EqPlatformAdapter"/> class.
@@ -108,12 +104,11 @@ namespace ASCOM.EqPlatformAdapter
         {
             driverID = Marshal.GenerateProgIdForType(this.GetType());
 
-            tl = new TraceLogger("", "EqPlatformAdapter");
+            tl = SharedResources.GetTraceLogger();
             ReadProfile(); // Read device configuration from the ASCOM Profile store
 
             tl.LogMessage("Camera", "Starting initialisation");
 
-            connectedState = false; // Initialise connected to false
             utilities = new Util(); //Initialise util object
             astroUtilities = new AstroUtils(); // Initialise astro utilities object
             //TODO: Implement your additional construction here
@@ -141,7 +136,7 @@ namespace ASCOM.EqPlatformAdapter
             if (IsConnected)
                 System.Windows.Forms.MessageBox.Show("Already connected, just press OK");
 
-            using (SetupDialogForm F = new SetupDialogForm())
+            using (SetupDialogForm F = new SetupDialogForm(this))
             {
                 var result = F.ShowDialog();
                 if (result == System.Windows.Forms.DialogResult.OK)
@@ -198,10 +193,17 @@ namespace ASCOM.EqPlatformAdapter
 
         public void Dispose()
         {
+            if (m_camera != null)
+            {
+                SharedResources.DisconnectCamera();
+                m_camera = null;
+            }
+
             // Clean up the tracelogger and util objects
-            tl.Enabled = false;
-            tl.Dispose();
+
+            SharedResources.PutTraceLogger();
             tl = null;
+
             utilities.Dispose();
             utilities = null;
             astroUtilities.Dispose();
@@ -223,15 +225,12 @@ namespace ASCOM.EqPlatformAdapter
 
                 if (value)
                 {
-                    connectedState = true;
-                    LogMessage("Connected Set", "Connecting to port {0}", comPort);
-                    // TODO connect to the device
+                    m_camera = SharedResources.ConnectCamera();
                 }
                 else
                 {
-                    connectedState = false;
-                    LogMessage("Connected Set", "Disconnecting from port {0}", comPort);
-                    // TODO disconnect from the device
+                    SharedResources.DisconnectCamera();
+                    m_camera = null;
                 }
             }
         }
@@ -889,8 +888,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                // TODO check that the driver hardware connection exists and is connected to the hardware
-                return connectedState;
+                return m_camera != null;
             }
         }
 
@@ -915,7 +913,6 @@ namespace ASCOM.EqPlatformAdapter
             {
                 driverProfile.DeviceType = "Camera";
                 tl.Enabled = Convert.ToBoolean(driverProfile.GetValue(driverID, traceStateProfileName, string.Empty, traceStateDefault));
-                comPort = driverProfile.GetValue(driverID, comPortProfileName, string.Empty, comPortDefault);
             }
         }
 
@@ -928,7 +925,6 @@ namespace ASCOM.EqPlatformAdapter
             {
                 driverProfile.DeviceType = "Camera";
                 driverProfile.WriteValue(driverID, traceStateProfileName, tl.Enabled.ToString());
-                driverProfile.WriteValue(driverID, comPortProfileName, comPort.ToString());
             }
         }
 
@@ -938,7 +934,7 @@ namespace ASCOM.EqPlatformAdapter
         /// <param name="identifier"></param>
         /// <param name="message"></param>
         /// <param name="args"></param>
-        internal static void LogMessage(string identifier, string message, params object[] args)
+        internal void LogMessage(string identifier, string message, params object[] args)
         {
             var msg = string.Format(message, args);
             tl.LogMessage(identifier, msg);

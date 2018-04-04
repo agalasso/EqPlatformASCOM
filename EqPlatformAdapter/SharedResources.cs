@@ -30,189 +30,321 @@ namespace ASCOM.EqPlatformAdapter
     /// </summary>
     public static class SharedResources
     {
+        public static string CamDriverId = "ASCOM.EqPlatformAdatper.Camera"; // fixme - get this from driver
+        public static string ScopeDriverId = "ASCOM.EqPlatformAdatper.Telescope"; // fixme - get this from driver
+
         // object used for locking to prevent multiple drivers accessing common code at the same time
         private static readonly object lockObject = new object();
 
-        // Shared serial port. This will allow multiple drivers to use one single serial port.
-        private static ASCOM.Utilities.Serial s_sharedSerial = new ASCOM.Utilities.Serial();        // Shared serial port
-        private static int s_z = 0;     // counter for the number of connections to the serial port
+        static ASCOM.DriverAccess.Camera s_camera;
+        static ASCOM.DriverAccess.Telescope s_mount;
+        static ASCOM.DriverAccess.Switch s_switch;
+        static short s_switchIdx;
 
-        //
-        // Public access to shared resources
-        //
+        static ASCOM.Utilities.TraceLogger s_tl;
+        static uint s_tl_cnt;
 
-        #region single serial port connector
-        //
-        // this region shows a way that a single serial port could be connected to by multiple 
-        // drivers.
-        //
-        // Connected is used to handle the connections to the port.
-        //
-        // SendMessage is a way that messages could be sent to the hardware without
-        // conflicts between different drivers.
-        //
-        // All this is for a single connection, multiple connections would need multiple ports
-        // and a way to handle connecting and disconnection from them - see the
-        // multi driver handling section for ideas.
-        //
+        static uint s_cam_connections; // number of connections to (outer) Camera device
+        static uint s_mount_connections; // number of connections to (outer) Telescope device
 
-        /// <summary>
-        /// Shared serial port
-        /// </summary>
-        public static ASCOM.Utilities.Serial SharedSerial { get { return s_sharedSerial; } }
-
-        /// <summary>
-        /// number of connections to the shared serial port
-        /// </summary>
-        public static int connections { get { return s_z; } set { s_z = value; } }
-
-        /// <summary>
-        /// Example of a shared SendMessage method, the lock
-        /// prevents different drivers tripping over one another.
-        /// It needs error handling and assumes that the message will be sent unchanged
-        /// and that the reply will always be terminated by a "#" character.
-        /// </summary>
-        /// <param name="message"></param>
-        /// <returns></returns>
-        public static string SendMessage(string message)
+        public static ASCOM.Utilities.TraceLogger GetTraceLogger()
         {
             lock (lockObject)
             {
-                SharedSerial.Transmit(message);
-                // TODO replace this with your requirements
-                return SharedSerial.ReceiveTerminated("#");
+                if (s_tl == null)
+                {
+                    s_tl = new ASCOM.Utilities.TraceLogger("", "EqPlatformAdapter");
+                }
+                ++s_tl_cnt;
+                return s_tl;
             }
         }
 
-        /// <summary>
-        /// Example of handling connecting to and disconnection from the
-        /// shared serial port.
-        /// Needs error handling
-        /// the port name etc. needs to be set up first, this could be done by the driver
-        /// checking Connected and if it's false setting up the port before setting connected to true.
-        /// It could also be put here.
-        /// </summary>
-        public static bool Connected
+        public static void PutTraceLogger()
         {
-            set
+            lock (lockObject)
+            {
+                if (--s_tl_cnt == 0)
+                {
+                    s_tl.Enabled = false;
+                    s_tl.Dispose();
+                    s_tl = null;
+                }
+            }
+        }
+
+        private static string GetCamDriverId()
+        {
+            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
+            {
+                profile.DeviceType = "Camera";
+                return profile.GetValue(CamDriverId, "cameraId", string.Empty, string.Empty);
+            }
+        }
+
+        private static void InstantiateCamera()
+        {
+            string cameraDriverId = GetCamDriverId();
+            s_camera = new ASCOM.DriverAccess.Camera(cameraDriverId);
+            s_cam_connections = 0;
+        }
+
+        public static void FreeCamera()
+        {
+            lock (lockObject)
+            {
+                s_camera.Dispose();
+                s_camera = null;
+                s_cam_connections = 0;
+            }
+        }
+
+        public static ASCOM.DriverAccess.Camera ConnectCamera()
+        {
+            bool updateForm = false;
+
+            lock (lockObject)
+            {
+                if (s_cam_connections > 0)
+                    throw new ASCOM.DriverException("multiple camera connections not allowed");
+
+                if (s_camera == null)
+                    InstantiateCamera();
+
+                if (s_cam_connections == 0)
+                {
+                    s_camera.Connected = true;
+                    updateForm = true;
+                }
+
+                ++s_cam_connections;
+            }
+
+            if (updateForm)
+                Server.MainForm.UpdateState();
+
+            return s_camera;
+        }
+
+        public static bool CameraConnected
+        {
+            get
             {
                 lock (lockObject)
                 {
-                    if (value)
+                    return s_cam_connections > 0;
+                }
+            }
+        }
+
+        public static void DisconnectCamera()
+        {
+            lock (lockObject)
+            {
+                if (s_cam_connections == 0)
+                    throw new InvalidOperationException("disconnecting camera when not connected");
+
+                if (--s_cam_connections == 0)
+                {
+                    try
                     {
-                        if (s_z == 0)
-                            SharedSerial.Connected = true;
-                        s_z++;
+                        s_camera.Connected = false;
                     }
-                    else
+                    catch (Exception)
                     {
-                        s_z--;
-                        if (s_z <= 0)
+                        // ignore it
+                    }
+                }
+            }
+
+            Server.MainForm.UpdateState();
+        }
+
+        private static void GetMountDriverIds(out string mountDriverId, out string switchDriverId, out short switchIdx)
+        {
+            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
+            {
+                profile.DeviceType = "Telescope";
+
+                string val = profile.GetValue(ScopeDriverId, "scopeId");
+                if (val == null || val.Length == 0)
+                    throw new ASCOM.DriverException("Missing ASCOM Telescope Device selection");
+                mountDriverId = val;
+
+                val = profile.GetValue(ScopeDriverId, "switchDriverId");
+                switchDriverId = val;
+
+                val = profile.GetValue(ScopeDriverId, "switchId");
+                switchIdx = 0;
+                Int16.TryParse(val, out switchIdx);
+            }
+        }
+
+        private static void InstantiateMount()
+        {
+            string mountDriverId, switchDriverId;
+            short switchIdx;
+            GetMountDriverIds(out mountDriverId, out switchDriverId, out switchIdx);
+
+            ASCOM.DriverAccess.Telescope mount = null;
+            ASCOM.DriverAccess.Switch sw = null;
+            try
+            {
+                mount = new ASCOM.DriverAccess.Telescope(mountDriverId);
+                if (switchDriverId.Length > 0)
+                {
+                    sw = new ASCOM.DriverAccess.Switch(switchDriverId);
+                }
+            }
+            catch (Exception)
+            {
+                mount.Dispose();
+                if (sw != null)
+                    sw.Dispose();
+                throw;
+            }
+
+            s_mount = mount;
+            s_mount_connections = 0;
+            s_switch = sw;
+            s_switchIdx = switchIdx;
+        }
+
+        public static void FreeMount()
+        {
+            lock (lockObject)
+            {
+                s_mount.Dispose();
+                s_mount = null;
+
+                if (s_switch != null)
+                {
+                    s_switch.Dispose();
+                    s_switch = null;
+                }
+
+                s_mount_connections = 0;
+            }
+        }
+
+        public static ASCOM.DriverAccess.Telescope ConnectMount(out ASCOM.DriverAccess.Switch outSw, out short outSwitchIdx)
+        {
+            bool updateForm = false;
+
+            lock (lockObject)
+            {
+                if (s_mount == null)
+                    InstantiateMount();
+
+                if (s_mount_connections == 0)
+                {
+                    s_mount.Connected = true;
+                    try
+                    {
+                        if (s_switch != null)
+                            s_switch.Connected = true;
+                    }
+                    catch (Exception)
+                    {
+                        try
                         {
-                            SharedSerial.Connected = false;
+                            s_mount.Connected = false;
+                        }
+                        catch (Exception)
+                        {
+                            // ignore it
+                        }
+                        throw;
+                    }
+                    updateForm = true;
+                }
+
+                ++s_mount_connections;
+            }
+
+            if (updateForm)
+                Server.MainForm.UpdateState();
+
+            outSw = s_switch;
+            outSwitchIdx = s_switchIdx;
+            return s_mount;
+        }
+
+        public static bool MountConnected
+        {
+            get
+            {
+                lock (lockObject)
+                {
+                    return s_mount_connections > 0;
+                }
+            }
+        }
+
+        public static void DisconnectMount()
+        {
+            lock (lockObject)
+            {
+                if (s_mount_connections == 0)
+                    throw new InvalidOperationException("disconnecting mount when not connected");
+
+                if (--s_mount_connections == 0)
+                {
+                    try
+                    {
+                        s_mount.Connected = false;
+                    }
+                    catch (Exception)
+                    {
+                        // ignore it
+                    }
+
+                    if (s_switch != null)
+                    {
+                        try
+                        {
+                            s_switch.Connected = false;
+                        }
+                        catch (Exception)
+                        {
+                            // ignore it
                         }
                     }
                 }
             }
-            get { return SharedSerial.Connected; }
+
+            Server.MainForm.UpdateState();
         }
 
-        #endregion
-
-        #region Multi Driver handling
-        // this section illustrates how multiple drivers could be handled,
-        // it's for drivers where multiple connections to the hardware can be made and ensures that the
-        // hardware is only disconnected from when all the connected devices have disconnected.
-
-        // It is NOT a complete solution!  This is to give ideas of what can - or should be done.
-        //
-        // An alternative would be to move the hardware control here, handle connecting and disconnecting,
-        // and provide the device with a suitable connection to the hardware.
-        //
-        /// <summary>
-        /// dictionary carrying device connections.
-        /// The Key is the connection number that identifies the device, it could be the COM port name,
-        /// USB ID or IP Address, the Value is the DeviceHardware class
-        /// </summary>
-        private static Dictionary<string, DeviceHardware> connectedDevices = new Dictionary<string, DeviceHardware>();
-
-        /// <summary>
-        /// This is called in the driver Connect(true) property,
-        /// it add the device id to the list of devices if it's not there and increments the device count.
-        /// </summary>
-        /// <param name="deviceId"></param>
-        public static void Connect(string deviceId)
+        public static void SetupCamera()
         {
             lock (lockObject)
             {
-                if (!connectedDevices.ContainsKey(deviceId))
-                    connectedDevices.Add(deviceId, new DeviceHardware());
-                connectedDevices[deviceId].count++;       // increment the value
+                if (s_camera == null)
+                    InstantiateCamera();
+                s_camera.SetupDialog();
             }
         }
 
-        public static void Disconnect(string deviceId)
+        public static void SetupMount()
         {
             lock (lockObject)
             {
-                if (connectedDevices.ContainsKey(deviceId))
-                {
-                    connectedDevices[deviceId].count--;
-                    if (connectedDevices[deviceId].count <= 0)
-                        connectedDevices.Remove(deviceId);
-                }
+                if (s_mount == null)
+                    InstantiateMount();
+                s_mount.SetupDialog();
             }
         }
 
-        public static bool IsConnected(string deviceId)
+        public static void SetupSwitch()
         {
-            if (connectedDevices.ContainsKey(deviceId))
-                return (connectedDevices[deviceId].count > 0);
-            else
-                return false;
-        }
-
-        #endregion
-
-    }
-
-    /// <summary>
-    /// Skeleton of a hardware class, all this does is hold a count of the connections,
-    /// in reality extra code will be needed to handle the hardware in some way
-    /// </summary>
-    public class DeviceHardware
-    {
-        internal int count { set; get; }
-
-        internal DeviceHardware()
-        {
-            count = 0;
+            lock (lockObject)
+            {
+                if (s_mount == null)
+                    InstantiateMount();
+                if (s_switch != null)
+                    s_switch.SetupDialog();
+            }
         }
     }
-
-    //#region ServedClassName attribute
-    ///// <summary>
-    ///// This is only needed if the driver is targeted at  platform 5.5, it is included with Platform 6
-    ///// </summary>
-    //[global::System.AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
-    //public sealed class ServedClassNameAttribute : Attribute
-    //{
-    //    // See the attribute guidelines at 
-    //    //  http://go.microsoft.com/fwlink/?LinkId=85236
-
-    //    /// <summary>
-    //    /// Gets or sets the 'friendly name' of the served class, as registered with the ASCOM Chooser.
-    //    /// </summary>
-    //    /// <value>The 'friendly name' of the served class.</value>
-    //    public string DisplayName { get; private set; }
-    //    /// <summary>
-    //    /// Initializes a new instance of the <see cref="ServedClassNameAttribute"/> class.
-    //    /// </summary>
-    //    /// <param name="servedClassName">The 'friendly name' of the served class.</param>
-    //    public ServedClassNameAttribute(string servedClassName)
-    //    {
-    //        DisplayName = servedClassName;
-    //    }
-    //}
-    //#endregion
 }

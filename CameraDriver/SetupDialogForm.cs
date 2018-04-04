@@ -13,8 +13,11 @@ namespace ASCOM.EqPlatformAdapter
     [ComVisible(false)]					// Form not registered for COM!
     public partial class SetupDialogForm : Form
     {
-        public SetupDialogForm()
+        private Camera m_cam;
+
+        public SetupDialogForm(Camera cam)
         {
+            m_cam = cam;
             InitializeComponent();
             // Initialise current values of user settings from the ASCOM Profile
             InitUI();
@@ -24,8 +27,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             // Place any validation constraint checks here
             // Update the state variables with results from the dialogue
-            Camera.comPort = (string)comboBoxComPort.SelectedItem;
-            Camera.tl.Enabled = chkTrace.Checked;
+            m_cam.tl.Enabled = chkTrace.Checked;
         }
 
         private void cmdCancel_Click(object sender, EventArgs e) // Cancel button event handler
@@ -52,15 +54,7 @@ namespace ASCOM.EqPlatformAdapter
 
         private void InitUI()
         {
-            chkTrace.Checked = Camera.tl.Enabled;
-            // set the list of com ports to those that are currently available
-            comboBoxComPort.Items.Clear();
-            comboBoxComPort.Items.AddRange(System.IO.Ports.SerialPort.GetPortNames());      // use System.IO because it's static
-            // select the current port if possible
-            if (comboBoxComPort.Items.Contains(Camera.comPort))
-            {
-                comboBoxComPort.SelectedItem = Camera.comPort;
-            }
+            chkTrace.Checked = m_cam.tl.Enabled;
         }
     }
 }
