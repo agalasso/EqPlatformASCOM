@@ -27,11 +27,6 @@ namespace ASCOM.EqPlatformAdapter
             }
         }
 
-        private void mountTrackingClick(object sender, EventArgs e)
-        {
-
-        }
-
         private void chooseCam_Click(object sender, EventArgs e)
         {
             using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
@@ -86,6 +81,15 @@ namespace ASCOM.EqPlatformAdapter
         {
             using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
             {
+                profile.DeviceType = "Telescope";
+                string stroke = profile.GetValue(SharedResources.ScopeDriverId, "strokeDegrees");
+                if (stroke != null && stroke.Length != 0)
+                {
+                    double val = 22.0;
+                    Double.TryParse(stroke, out val);
+                    this.stroke.Value = (decimal) val;
+                }
+
                 profile.DeviceType = "Camera";
                 string camId = profile.GetValue(SharedResources.CamDriverId, "cameraId");
                 if (camId != null && camId.Length != 0)
@@ -207,6 +211,91 @@ namespace ASCOM.EqPlatformAdapter
             this.chooseSwitch.Enabled = enable_mount;
             this.setupSwitch.Enabled = enable_mount;
             this.switchIds.Enabled = enable_mount;
+
+            Platform platform = SharedResources.s_platform;
+
+            stroke.Enabled = !mount_connected;
+
+            if (!mount_connected)
+            {
+                btnStart.Enabled = false;
+                btnPause.Enabled = false;
+                btnResume.Enabled = false;
+                btnReset.Enabled = false;
+                platformStatus.Clear();
+                statusTimer.Enabled = false;
+                return;
+            }
+
+            switch (platform.TrackingState)
+            {
+                case TrackingStates.AtStart:
+                    btnStart.Enabled = true;
+                    btnPause.Enabled = false;
+                    btnResume.Enabled = false;
+                    btnReset.Enabled = false;
+                    platformStatus.Text = "At Start";
+                    statusTimer.Enabled = false;
+                    break;
+                case TrackingStates.Stopped:
+                    btnStart.Enabled = false;
+                    btnPause.Enabled = false;
+                    btnResume.Enabled = platform.TimeRemaining > 0.0;
+                    btnReset.Enabled = true;
+                    platformStatus.Text = String.Format("Paused, {0:F0}s remaining", platform.TimeRemaining);
+                    statusTimer.Enabled = false;
+                    break;
+                case TrackingStates.Tracking:
+                    btnStart.Enabled = false;
+                    btnPause.Enabled = true;
+                    btnResume.Enabled = false;
+                    btnReset.Enabled = true;
+                    platformStatus.Text = String.Format("Tracking, {0:F0}s remaining", platform.TimeRemaining);
+                    statusTimer.Enabled = true;
+                    break;
+            }
+        }
+
+        private void statusTimer_Tick(object sender, EventArgs e)
+        {
+            Platform platform = SharedResources.s_platform;
+
+            if (platform.TimeRemaining <= 0.0)
+            {
+                platform.StopTracking(); // will update state
+                return;
+            }
+
+            UpdateState();
+        }
+
+        private void stroke_ValueChanged(object sender, EventArgs e)
+        {
+            SharedResources.s_platform.StrokeDegrees = (double) stroke.Value;
+            using (Settings s = new Settings())
+            {
+                s.Set("strokeDegrees", String.Format("{0:F1}", stroke.Value));
+            }
+        }
+
+        private void btnStart_Click(object sender, EventArgs e)
+        {
+            SharedResources.s_platform.StartTracking();
+        }
+
+        private void btnPause_Click(object sender, EventArgs e)
+        {
+            SharedResources.s_platform.StopTracking();
+        }
+
+        private void btnResume_Click(object sender, EventArgs e)
+        {
+            SharedResources.s_platform.ResumeTracking();
+        }
+
+        private void btnReset_Click(object sender, EventArgs e)
+        {
+            SharedResources.s_platform.Reset();
         }
     }
 }

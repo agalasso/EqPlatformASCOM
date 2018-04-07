@@ -14,12 +14,230 @@
 // Modified by Chris Rowland and Peter Simpson to hamdle multiple hardware devices March 2011
 //
 using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 using ASCOM;
 
 namespace ASCOM.EqPlatformAdapter
 {
+    public enum TrackingStates
+    {
+        AtStart,
+        Tracking,
+        Stopped
+    }
+
+    internal class Settings : IDisposable
+    {
+        private ASCOM.Utilities.Profile profile = new ASCOM.Utilities.Profile();
+
+        internal Settings()
+        {
+            profile.DeviceType = "Telescope";
+        }
+
+        public void Dispose()
+        {
+            if (profile != null)
+            {
+                profile.Dispose();
+                profile = null;
+            }
+            GC.SuppressFinalize(this);
+        }
+
+        public string Get(string name, string defaultval)
+        {
+            return profile.GetValue(SharedResources.ScopeDriverId, name, string.Empty, defaultval);
+        }
+
+        public string Get(string name)
+        {
+            return Get(name, String.Empty);
+        }
+
+        public void Set(string name, string val)
+        {
+            profile.WriteValue(SharedResources.ScopeDriverId, name, val);
+        }
+    }
+
+    public class Platform
+    {
+        private static double SIDEREAL_DAY_SECONDS = (23.0 * 60.0 + 56.0) * 60.0 + 4.0905;
+        private static double SIDEREAL_DEGREES_PER_SECOND = 360.0 / SIDEREAL_DAY_SECONDS;
+
+        private TrackingStates m_state;
+        private double m_stroke; // full stroke time in seconds
+
+        // coordinates at the time tracking started
+        double m_ra;
+        double m_dec;
+        internal Stopwatch m_swatch; // elpsaed tracking time
+
+        internal Platform()
+        {
+            m_swatch = new Stopwatch();
+
+            Init();
+        }
+
+        public void Init()
+        {
+            m_state = TrackingStates.AtStart;
+
+            using (Settings settings = new Settings())
+            {
+                string s = settings.Get("strokeDegrees", "22.0");
+                double val = 22.0;
+                Double.TryParse(s, out val);
+                StrokeDegrees = val;
+            }
+
+            m_swatch.Reset();
+        }
+
+        public TrackingStates TrackingState
+        {
+            get
+            {
+                return m_state;
+            }
+        }
+
+        public double StrokeSeconds
+        {
+            get
+            {
+                return m_stroke;
+            }
+        }
+
+        public double StrokeDegrees
+        {
+            get
+            {
+                return m_stroke * SIDEREAL_DEGREES_PER_SECOND;
+            }
+            set
+            {
+                m_stroke = value / SIDEREAL_DEGREES_PER_SECOND;
+            }
+        }
+
+        public double TimeRemaining
+        {
+            get
+            {
+                double rem = m_stroke - m_swatch.ElapsedMilliseconds / 1000.0;
+                return rem > 0.0 ? rem : 0.0;
+            }
+        }
+
+        private void DoStart()
+        {
+            // grab the starting coordinates
+            m_ra = SharedResources.s_mount.RightAscension;
+            m_dec = SharedResources.s_mount.Declination;
+
+            // stop mount tracking
+            SharedResources.s_mount.Tracking = false;
+
+            // start platform tracking
+            if (SharedResources.s_switch != null)
+                SharedResources.s_switch.SetSwitch(SharedResources.s_switchIdx, true);
+
+            // start the tracking timer
+            m_swatch.Start();
+
+            m_state = TrackingStates.Tracking;
+        }
+
+        public void StartTracking()
+        {
+            if (TrackingState != TrackingStates.AtStart)
+                throw new ASCOM.InvalidOperationException("cannot start tracking unless platform is at start position");
+
+            DoStart();
+
+            Server.MainForm.UpdateState();
+        }
+
+        public void StopTracking()
+        {
+            if (TrackingState != TrackingStates.Tracking)
+                return;
+
+            // stop platform tracking
+            if (SharedResources.s_switch != null)
+                SharedResources.s_switch.SetSwitch(SharedResources.s_switchIdx, false);
+
+            // stop the tracking timer
+            m_swatch.Stop();
+
+            // start mount tracking
+            SharedResources.s_mount.Tracking = true;
+
+            // assume RA and Dec stay fixed during equatorial tracking, sync mount to starting RA/Dec
+            SharedResources.s_mount.SyncToCoordinates(m_ra, m_dec);
+
+            m_state = TrackingStates.Stopped;
+
+            Server.MainForm.UpdateState();
+        }
+
+        public void ResumeTracking()
+        {
+            if (TrackingState != TrackingStates.Stopped)
+                throw new ASCOM.InvalidOperationException("cannot resume tracking unless platform is paused");
+
+            DoStart();
+
+            Server.MainForm.UpdateState();
+        }
+
+        public void Reset()
+        {
+            if (m_state == TrackingStates.AtStart)
+                return;
+
+            double ra, dec;
+
+            if (m_state == TrackingStates.Stopped)
+            {
+                // mount is tracking, grab RA and dec from the mount
+                ra = SharedResources.s_mount.RightAscension;
+                dec = SharedResources.s_mount.Declination;
+            }
+            else
+            {
+                // platform is tracking, use the saved coordinates
+                ra = m_ra;
+                dec = m_dec;
+
+                // stop platform tracking
+                if (SharedResources.s_switch != null)
+                    SharedResources.s_switch.SetSwitch(SharedResources.s_switchIdx, false);
+
+                // start mount tracking
+                SharedResources.s_mount.Tracking = true;
+            }
+
+            m_swatch.Stop();
+
+            double delta_ra = m_swatch.ElapsedMilliseconds / 1000.0 * SIDEREAL_DEGREES_PER_SECOND;
+
+            SharedResources.s_mount.SyncToCoordinates(ra - delta_ra, dec);
+
+            // reset the tracking timer
+            m_swatch.Reset();
+
+            m_state = TrackingStates.AtStart;
+
+            Server.MainForm.UpdateState();
+        }
+    }
+
     /// <summary>
     /// The resources shared by all drivers and devices, in this example it's a serial port with a shared SendMessage method
     /// an idea for locking the message and handling connecting is given.
@@ -36,10 +254,12 @@ namespace ASCOM.EqPlatformAdapter
         // object used for locking to prevent multiple drivers accessing common code at the same time
         private static readonly object lockObject = new object();
 
-        static ASCOM.DriverAccess.Camera s_camera;
-        static ASCOM.DriverAccess.Telescope s_mount;
-        static ASCOM.DriverAccess.Switch s_switch;
-        static short s_switchIdx;
+        static internal ASCOM.DriverAccess.Camera s_camera;
+        static internal ASCOM.DriverAccess.Telescope s_mount;
+        static internal ASCOM.DriverAccess.Switch s_switch;
+        static internal short s_switchIdx;
+
+        static internal Platform s_platform = new Platform();
 
         static ASCOM.Utilities.TraceLogger s_tl;
         static uint s_tl_cnt;
@@ -75,10 +295,9 @@ namespace ASCOM.EqPlatformAdapter
 
         private static string GetCamDriverId()
         {
-            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
+            using (Settings settings = new Settings())
             {
-                profile.DeviceType = "Camera";
-                return profile.GetValue(CamDriverId, "cameraId", string.Empty, string.Empty);
+                return settings.Get("cameraId");
             }
         }
 
@@ -181,19 +400,17 @@ namespace ASCOM.EqPlatformAdapter
 
         private static void GetMountDriverIds(out string mountDriverId, out string switchDriverId, out short switchIdx)
         {
-            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
+            using (Settings settings = new Settings())
             {
-                profile.DeviceType = "Telescope";
-
-                string val = profile.GetValue(ScopeDriverId, "scopeId");
+                string val = settings.Get("scopeId");
                 if (val == null || val.Length == 0)
                     throw new ASCOM.DriverException("Missing ASCOM Telescope Device selection");
                 mountDriverId = val;
 
-                val = profile.GetValue(ScopeDriverId, "switchDriverId");
+                val = settings.Get("switchDriverId");
                 switchDriverId = val;
 
-                val = profile.GetValue(ScopeDriverId, "switchId");
+                val = settings.Get("switchId");
                 switchIdx = 0;
                 Int16.TryParse(val, out switchIdx);
             }
@@ -309,6 +526,8 @@ namespace ASCOM.EqPlatformAdapter
 
                 if (--s_mount_connections == 0)
                 {
+                    s_platform.Init();
+
                     try
                     {
                         s_mount.Connected = false;
