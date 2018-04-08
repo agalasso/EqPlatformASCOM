@@ -16,17 +16,6 @@ namespace ASCOM.EqPlatformAdapter
             InitializeComponent();
         }
 
-        private const int CP_NOCLOSE_BUTTON = 0x200;
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                CreateParams myCp = base.CreateParams;
-                myCp.ClassStyle = myCp.ClassStyle | CP_NOCLOSE_BUTTON;
-                return myCp;
-            }
-        }
-
         private string DeviceName(string deviceType, string driverId)
         {
             if (driverId.Length == 0)
@@ -263,6 +252,18 @@ namespace ASCOM.EqPlatformAdapter
         {
             bool enable = cbTrace.Checked;
             SharedResources.EnableLogging(enable);
+        }
+
+        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (Server.ObjectsCount != 0)
+            {
+                string msg = String.Format("There are {0} client application(s) currently connected to the server. Are you sure you want to exit?", Server.ObjectsCount);
+                if (MessageBox.Show(msg, "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
+                {
+                    e.Cancel = true;
+                }
+            }
         }
     }
 }

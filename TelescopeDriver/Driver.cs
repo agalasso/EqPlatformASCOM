@@ -143,10 +143,7 @@ namespace ASCOM.EqPlatformAdapter
         /// </summary>
         public void SetupDialog()
         {
-            using (SetupDialogForm F = new SetupDialogForm(this))
-            {
-                F.ShowDialog();
-            }
+            Server.MainForm.Activate();
         }
 
         public ArrayList SupportedActions

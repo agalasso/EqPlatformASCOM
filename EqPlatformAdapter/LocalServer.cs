@@ -608,6 +608,9 @@ namespace ASCOM.EqPlatformAdapter
             Application.SetCompatibleTextRenderingDefault(false);
             s_MainForm = new MainForm();
 
+            // hack to keep server process alive
+            CountLock();
+
             // Register the class factories of the served objects
             RegisterClassFactories();
 

@@ -340,6 +340,7 @@ namespace ASCOM.EqPlatformAdapter
             this.MaximizeBox = false;
             this.Name = "MainForm";
             this.Text = "EqPlatformAdapter Driver Server";
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             this.Load += new System.EventHandler(this.frmMain_Load);
             this.groupBox1.ResumeLayout(false);
             this.groupBox1.PerformLayout();
