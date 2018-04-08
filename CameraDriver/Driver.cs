@@ -71,9 +71,6 @@ namespace ASCOM.EqPlatformAdapter
         /// </summary>
         private static string driverDescription = "ASCOM Camera Driver for Equatorial Platform Adapter.";
 
-        internal static string traceStateProfileName = "Trace Level";
-        internal static string traceStateDefault = "false";
-
         /// <summary>
         /// Private variable to hold the connected state
         /// </summary>
@@ -93,10 +90,7 @@ namespace ASCOM.EqPlatformAdapter
             driverID = Marshal.GenerateProgIdForType(this.GetType());
 
             tl = SharedResources.GetTraceLogger();
-            ReadProfile(); // Read device configuration from the ASCOM Profile store
-
             tl.LogMessage("Camera", "Starting initialisation");
-
             tl.LogMessage("Camera", "Completed initialisation");
         }
 
@@ -802,30 +796,6 @@ namespace ASCOM.EqPlatformAdapter
         private void CheckConnected()
         {
             CheckConnected("Not connected");
-        }
-
-        /// <summary>
-        /// Read the device configuration from the ASCOM Profile store
-        /// </summary>
-        internal void ReadProfile()
-        {
-            using (Profile driverProfile = new Profile())
-            {
-                driverProfile.DeviceType = "Camera";
-                tl.Enabled = Convert.ToBoolean(driverProfile.GetValue(driverID, traceStateProfileName, string.Empty, traceStateDefault));
-            }
-        }
-
-        /// <summary>
-        /// Write the device configuration to the  ASCOM  Profile store
-        /// </summary>
-        internal void WriteProfile()
-        {
-            using (Profile driverProfile = new Profile())
-            {
-                driverProfile.DeviceType = "Camera";
-                driverProfile.WriteValue(driverID, traceStateProfileName, tl.Enabled.ToString());
-            }
         }
 
         /// <summary>

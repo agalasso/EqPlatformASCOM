@@ -53,6 +53,9 @@ namespace ASCOM.EqPlatformAdapter
 
             string switchDriverId = settings.Get("switchDriverId");
 
+            if (switchDriverId.Length == 0)
+                return;
+
             using (ASCOM.DriverAccess.Switch sw = new ASCOM.DriverAccess.Switch(switchDriverId))
             {
                 sw.Connected = true;
