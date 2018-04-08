@@ -9,6 +9,8 @@ namespace ASCOM.EqPlatformAdapter
         /// </summary>
         private System.ComponentModel.IContainer components = null;
 
+        private Settings settings = new Settings();
+
         /// <summary>
         /// Clean up any resources being used.
         /// </summary>
@@ -18,6 +20,11 @@ namespace ASCOM.EqPlatformAdapter
             if (disposing && (components != null))
             {
                 components.Dispose();
+                if (settings != null)
+                {
+                    settings.Dispose();
+                    settings = null;
+                }
             }
             base.Dispose(disposing);
         }

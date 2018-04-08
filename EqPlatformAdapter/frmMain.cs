@@ -27,27 +27,33 @@ namespace ASCOM.EqPlatformAdapter
             }
         }
 
+        private string DeviceName(string deviceType, string driverId)
+        {
+            if (driverId.Length == 0)
+                return String.Empty;
+
+            using (ASCOM.Utilities.Profile profile = new ASCOM.Utilities.Profile())
+            {
+                profile.DeviceType = deviceType;
+                return profile.GetValue(driverId, string.Empty, string.Empty, driverId);
+            }
+        }
+
         private void chooseCam_Click(object sender, EventArgs e)
         {
-            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
-            {
-                profile.DeviceType = "Camera";
-                string camId = profile.GetValue(SharedResources.CamDriverId, "cameraId", string.Empty, string.Empty);
+            string camId = settings.Get("cameraId");
 
-                using (ASCOM.Utilities.Chooser chooser = new Utilities.Chooser())
+            using (ASCOM.Utilities.Chooser chooser = new Utilities.Chooser())
+            {
+                chooser.DeviceType = "Camera";
+                string val = chooser.Choose(camId);
+                if (!String.IsNullOrEmpty(val) && val != camId)
                 {
-                    chooser.DeviceType = "Camera";
-                    string val = chooser.Choose(camId);
-                    if (val != null && val.Length != 0 && val != camId)
-                    {
-                        if (val == SharedResources.CamDriverId)
-                            return; // reject choice of this driver!
-                        string camName = profile.GetValue(val, string.Empty, string.Empty, val);
-                        profile.WriteValue(SharedResources.CamDriverId, "cameraId", val);
-                        profile.WriteValue(SharedResources.CamDriverId, "cameraName", camName);
-                        this.camName.Text = camName;
-                        SharedResources.FreeCamera();
-                    }
+                    if (val == SharedResources.CamDriverId)
+                        return; // reject choice of this driver!
+                    settings.Set("cameraId", val);
+                    camName.Text = DeviceName("Camera", val);
+                    SharedResources.FreeCamera();
                 }
             }
         }
@@ -56,115 +62,72 @@ namespace ASCOM.EqPlatformAdapter
         {
             this.switchIds.Items.Clear();
 
-            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
+            string switchDriverId = settings.Get("switchDriverId");
+
+            using (ASCOM.DriverAccess.Switch sw = new ASCOM.DriverAccess.Switch(switchDriverId))
             {
-                profile.DeviceType = "Telescope";
-                string switchDriverId = profile.GetValue(SharedResources.ScopeDriverId, "switchDriverId", string.Empty, string.Empty);
-
-                using (ASCOM.DriverAccess.Switch sw = new ASCOM.DriverAccess.Switch(switchDriverId))
+                sw.Connected = true;
+                for (short n = 0; n < sw.MaxSwitch; n++)
                 {
-                    sw.Connected = true;
-                    for (short n = 0; n < sw.MaxSwitch; n++)
-                    {
-                        string name = sw.GetSwitchName(n);
-                        this.switchIds.Items.Add(name);
-                    }
+                    string name = sw.GetSwitchName(n);
+                    this.switchIds.Items.Add(name);
                 }
-
-                short switchId = 0;
-                Int16.TryParse(profile.GetValue(SharedResources.ScopeDriverId, "switchId", string.Empty, "0"), out switchId);
-                this.switchIds.SelectedIndex = switchId;
             }
+
+            short switchId = 0;
+            Int16.TryParse(settings.Get("switchId", "0"), out switchId);
+            this.switchIds.SelectedIndex = switchId;
         }
 
         private void frmMain_Load(object sender, EventArgs e)
         {
-            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
+            string stroke = settings.Get("strokeDegrees");
+            if (stroke.Length != 0)
             {
-                profile.DeviceType = "Telescope";
-                string stroke = profile.GetValue(SharedResources.ScopeDriverId, "strokeDegrees");
-                if (stroke != null && stroke.Length != 0)
-                {
-                    double val = 22.0;
-                    Double.TryParse(stroke, out val);
-                    this.stroke.Value = (decimal) val;
-                }
-
-                profile.DeviceType = "Camera";
-                string camId = profile.GetValue(SharedResources.CamDriverId, "cameraId");
-                if (camId != null && camId.Length != 0)
-                {
-                    string camName = profile.GetValue(camId, string.Empty, string.Empty, camId);
-                    this.camName.Text = camName;
-                }
-
-                profile.DeviceType = "Telescope";
-                string scopeId = profile.GetValue(SharedResources.ScopeDriverId, "scopeId");
-                if (scopeId != null && scopeId.Length != 0)
-                {
-                    string scopeName = profile.GetValue(scopeId, string.Empty, string.Empty, scopeId);
-                    this.mountName.Text = scopeName;
-                }
-
-                profile.DeviceType = "Telescope";
-                string switchDriverId = profile.GetValue(SharedResources.ScopeDriverId, "switchDriverId");
-                if (switchDriverId != null && switchDriverId.Length != 0)
-                {
-                    profile.DeviceType = "Switch";
-                    string switchDriverName = profile.GetValue(switchDriverId, string.Empty, string.Empty, switchDriverId);
-                    this.switchDriverName.Text = switchDriverName;
-                }
+                double val = 22.0;
+                Double.TryParse(stroke, out val);
+                this.stroke.Value = (decimal) val;
             }
+
+            camName.Text = DeviceName("Camera", settings.Get("cameraId"));
+            mountName.Text = DeviceName("Telescope", settings.Get("scopeId"));
+            switchDriverName.Text = DeviceName("Switch", settings.Get("switchDriverId"));
 
             LoadSwitches();
         }
 
         private void chooseMount_Click(object sender, EventArgs e)
         {
-            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
-            {
-                profile.DeviceType = "Telescope";
-                string scopeId = profile.GetValue(SharedResources.ScopeDriverId, "scopeId", string.Empty, string.Empty);
+            string scopeId = settings.Get("scopeId");
 
-                using (ASCOM.Utilities.Chooser chooser = new Utilities.Chooser())
+            using (ASCOM.Utilities.Chooser chooser = new Utilities.Chooser())
+            {
+                chooser.DeviceType = "Telescope";
+                string val = chooser.Choose(scopeId);
+                if (!String.IsNullOrEmpty(val) && val != scopeId)
                 {
-                    chooser.DeviceType = "Telescope";
-                    string val = chooser.Choose(scopeId);
-                    if (val != null && val.Length != 0 && val != scopeId)
-                    {
-                        if (val == SharedResources.ScopeDriverId)
-                            return; // reject choice of this driver!
-                        string scopeName = profile.GetValue(val, string.Empty, string.Empty, val);
-                        profile.WriteValue(SharedResources.ScopeDriverId, "scopeId", val);
-                        profile.WriteValue(SharedResources.ScopeDriverId, "scopeName", scopeName);
-                        this.mountName.Text = scopeName;
-                        SharedResources.FreeMount();
-                    }
+                    if (val == SharedResources.ScopeDriverId)
+                        return; // reject choice of this driver!
+                    settings.Set("scopeId", val);
+                    mountName.Text = DeviceName("Telescope", val);
+                    SharedResources.FreeMount();
                 }
             }
         }
 
         private void chooseSwitch_Click(object sender, EventArgs e)
         {
-            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
-            {
-                profile.DeviceType = "Telescope";
-                string switchDriverId = profile.GetValue(SharedResources.ScopeDriverId, "switchDriverId", string.Empty, string.Empty);
+            string switchDriverId = settings.Get("switchDriverId");
 
-                using (ASCOM.Utilities.Chooser chooser = new Utilities.Chooser())
+            using (ASCOM.Utilities.Chooser chooser = new Utilities.Chooser())
+            {
+                chooser.DeviceType = "Switch";
+                string val = chooser.Choose(switchDriverId);
+                if (!String.IsNullOrEmpty(val) && val != switchDriverId)
                 {
-                    chooser.DeviceType = "Switch";
-                    string val = chooser.Choose(switchDriverId);
-                    if (val != null && val.Length != 0 && val != switchDriverId)
-                    {
-                        profile.DeviceType = "Switch";
-                        string switchDriverName = profile.GetValue(val, string.Empty, string.Empty, val);
-                        profile.DeviceType = "Telescope";
-                        profile.WriteValue(SharedResources.ScopeDriverId, "switchDriverId", val);
-                        profile.WriteValue(SharedResources.ScopeDriverId, "switchDriverName", switchDriverName);
-                        this.switchDriverName.Text = switchDriverName;
-                        SharedResources.FreeMount();
-                    }
+                    settings.Set("switchDriverId", val);
+                    switchDriverName.Text = DeviceName("Switch", val);
+                    SharedResources.FreeMount();
                 }
             }
 
@@ -178,12 +141,8 @@ namespace ASCOM.EqPlatformAdapter
 
         private void switchId_SelectedIndexChanged(object sender, EventArgs e)
         {
-            using (ASCOM.Utilities.Profile profile = new Utilities.Profile())
-            {
-                profile.DeviceType = "Telescope";
-                short switchId = (short)this.switchIds.SelectedIndex;
-                profile.WriteValue(SharedResources.ScopeDriverId, "switchId", switchId.ToString());
-            }
+            short switchId = (short)this.switchIds.SelectedIndex;
+            settings.Set("switchId", switchId.ToString());
         }
 
         private void setupCam_Click(object sender, EventArgs e)
@@ -272,10 +231,7 @@ namespace ASCOM.EqPlatformAdapter
         private void stroke_ValueChanged(object sender, EventArgs e)
         {
             SharedResources.s_platform.StrokeDegrees = (double) stroke.Value;
-            using (Settings s = new Settings())
-            {
-                s.Set("strokeDegrees", String.Format("{0:F1}", stroke.Value));
-            }
+            settings.Set("strokeDegrees", String.Format("{0:F1}", stroke.Value));
         }
 
         private void btnStart_Click(object sender, EventArgs e)

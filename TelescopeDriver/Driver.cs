@@ -34,6 +34,7 @@ using System.Runtime.InteropServices;
 
 using ASCOM;
 using ASCOM.Astrometry;
+using ASCOM.Astrometry.Transform;
 using ASCOM.Astrometry.AstroUtils;
 using ASCOM.Utilities;
 using ASCOM.DeviceInterface;
@@ -80,8 +81,7 @@ namespace ASCOM.EqPlatformAdapter
         /// Private variable to hold the connected state
         /// </summary>
         private ASCOM.DriverAccess.Telescope m_mount;
-        private ASCOM.DriverAccess.Switch m_switch;
-        private short m_switchIdx;
+        private ASCOM.DriverAccess.Camera m_camera;
 
         /// <summary>
         /// Private variable to hold an ASCOM Utilities object
@@ -92,11 +92,20 @@ namespace ASCOM.EqPlatformAdapter
         /// Private variable to hold an ASCOM AstroUtilities object to provide the Range method
         /// </summary>
         private AstroUtils astroUtilities;
+        private Transform transform;
 
         /// <summary>
         /// Variable to hold the trace logger object (creates a diagnostic log file with information that you specify)
         /// </summary>
         internal TraceLogger tl;
+
+        private Platform Platform
+        {
+            get
+            {
+                return SharedResources.s_platform;
+            }
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EqPlatformAdapter"/> class.
@@ -114,6 +123,7 @@ namespace ASCOM.EqPlatformAdapter
 
             utilities = new Util(); //Initialise util object
             astroUtilities = new AstroUtils(); // Initialise astro utilities object
+            transform = new Transform();
 
             tl.LogMessage("Telescope", "Completed initialisation");
         }
@@ -152,45 +162,33 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("SupportedActions Get", "Returning empty arraylist");
-                return new ArrayList();
+                CheckConnected();
+                return m_mount.SupportedActions;
             }
         }
 
         public string Action(string actionName, string actionParameters)
         {
-            LogMessage("", "Action {0}, parameters {1} not implemented", actionName, actionParameters);
-            throw new ASCOM.ActionNotImplementedException("Action " + actionName + " is not implemented by this driver");
+            CheckConnected();
+            return m_mount.Action(actionName, actionParameters);
         }
 
         public void CommandBlind(string command, bool raw)
         {
-            CheckConnected("CommandBlind");
-            // Call CommandString and return as soon as it finishes
-            this.CommandString(command, raw);
-            // or
-            throw new ASCOM.MethodNotImplementedException("CommandBlind");
-            // DO NOT have both these sections!  One or the other
+            CheckConnected();
+            m_mount.CommandBlind(command, raw);
         }
 
         public bool CommandBool(string command, bool raw)
         {
-            CheckConnected("CommandBool");
-            string ret = CommandString(command, raw);
-            // TODO decode the return string and return true or false
-            // or
-            throw new ASCOM.MethodNotImplementedException("CommandBool");
-            // DO NOT have both these sections!  One or the other
+            CheckConnected();
+            return m_mount.CommandBool(command, raw);
         }
 
         public string CommandString(string command, bool raw)
         {
-            CheckConnected("CommandString");
-            // it's a good idea to put all the low level communication with the device here,
-            // then all communication calls this function
-            // you need something to ensure that only one command is in progress at a time
-
-            throw new ASCOM.MethodNotImplementedException("CommandString");
+            CheckConnected();
+            return m_mount.CommandString(command, raw);
         }
 
         public void Dispose()
@@ -200,7 +198,7 @@ namespace ASCOM.EqPlatformAdapter
             {
                 SharedResources.DisconnectMount();
                 m_mount = null;
-                m_switch = null;
+                m_camera = null;
             }
 
             SharedResources.PutTraceLogger();
@@ -210,6 +208,8 @@ namespace ASCOM.EqPlatformAdapter
             utilities = null;
             astroUtilities.Dispose();
             astroUtilities = null;
+            transform.Dispose();
+            transform = null;
         }
 
         public bool Connected
@@ -227,7 +227,7 @@ namespace ASCOM.EqPlatformAdapter
 
                 if (value)
                 {
-                    m_mount = SharedResources.ConnectMount(out m_switch, out m_switchIdx);
+                    m_mount = SharedResources.ConnectMount(out m_camera);
                 }
                 else
                 {
@@ -239,10 +239,8 @@ namespace ASCOM.EqPlatformAdapter
 
         public string Description
         {
-            // TODO customise this device description
             get
             {
-                tl.LogMessage("Description Get", driverDescription);
                 return driverDescription;
             }
         }
@@ -252,9 +250,7 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 Version version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-                // TODO customise this driver description
-                string driverInfo = "Information about the driver itself. Version: " + String.Format(CultureInfo.InvariantCulture, "{0}.{1}", version.Major, version.Minor);
-                tl.LogMessage("DriverInfo Get", driverInfo);
+                string driverInfo = driverDescription + " Version: " + String.Format(CultureInfo.InvariantCulture, "{0}.{1}", version.Major, version.Minor);
                 return driverInfo;
             }
         }
@@ -265,7 +261,6 @@ namespace ASCOM.EqPlatformAdapter
             {
                 Version version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 string driverVersion = String.Format(CultureInfo.InvariantCulture, "{0}.{1}", version.Major, version.Minor);
-                tl.LogMessage("DriverVersion Get", driverVersion);
                 return driverVersion;
             }
         }
@@ -275,7 +270,6 @@ namespace ASCOM.EqPlatformAdapter
             // set by the driver wizard
             get
             {
-                LogMessage("InterfaceVersion Get", "3");
                 return Convert.ToInt16("3");
             }
         }
@@ -284,8 +278,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                string name = "Short driver name - please customise";
-                tl.LogMessage("Name Get", name);
+                string name = "EQ Platform Adapter driver Telescope Device";
                 return name;
             }
         }
@@ -295,25 +288,41 @@ namespace ASCOM.EqPlatformAdapter
         #region ITelescope Implementation
         public void AbortSlew()
         {
-            tl.LogMessage("AbortSlew", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("AbortSlew");
+            CheckConnected();
+            m_mount.AbortSlew();
         }
 
         public AlignmentModes AlignmentMode
         {
             get
             {
-                tl.LogMessage("AlignmentMode Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("AlignmentMode", false);
+                CheckConnected();
+                return m_mount.AlignmentMode;
             }
+        }
+
+        private void InitTransform()
+        {
+            transform.SiteElevation = m_mount.SiteElevation;
+            transform.SiteLatitude = m_mount.SiteLatitude;
+            transform.SiteLongitude = m_mount.SiteLongitude;
+            transform.SetTopocentric(Platform.RightAscension, Platform.Declination);
         }
 
         public double Altitude
         {
             get
             {
-                tl.LogMessage("Altitude", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Altitude", false);
+                CheckConnected();
+                if (Platform.IsTracking)
+                {
+                    InitTransform();
+                    return transform.ElevationTopocentric;
+                }
+                else
+                {
+                    return m_mount.Altitude;
+                }
             }
         }
 
@@ -321,8 +330,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("ApertureArea Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ApertureArea", false);
+                CheckConnected();
+                return m_mount.ApertureArea;
             }
         }
 
@@ -330,8 +339,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("ApertureDiameter Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ApertureDiameter", false);
+                CheckConnected();
+                return m_mount.ApertureDiameter;
             }
         }
 
@@ -339,8 +348,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("AtHome", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return !Platform.IsTracking && m_mount.AtHome;
             }
         }
 
@@ -348,23 +357,32 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("AtPark", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return !Platform.IsTracking && m_mount.AtPark;
             }
         }
 
         public IAxisRates AxisRates(TelescopeAxes Axis)
         {
-            tl.LogMessage("AxisRates", "Get - " + Axis.ToString());
-            return new AxisRates(Axis);
+            CheckConnected();
+            // TODO: should this do anything different?
+            return m_mount.AxisRates(Axis);
         }
 
         public double Azimuth
         {
             get
             {
-                tl.LogMessage("Azimuth Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Azimuth", false);
+                CheckConnected();
+                if (Platform.IsTracking)
+                {
+                    InitTransform();
+                    return transform.AzimuthTopocentric;
+                }
+                else
+                {
+                    return m_mount.Azimuth;
+                }
             }
         }
 
@@ -372,29 +390,24 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanFindHome", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanFindHome;
             }
         }
 
         public bool CanMoveAxis(TelescopeAxes Axis)
         {
-            tl.LogMessage("CanMoveAxis", "Get - " + Axis.ToString());
-            switch (Axis)
-            {
-                case TelescopeAxes.axisPrimary: return false;
-                case TelescopeAxes.axisSecondary: return false;
-                case TelescopeAxes.axisTertiary: return false;
-                default: throw new InvalidValueException("CanMoveAxis", Axis.ToString(), "0 to 2");
-            }
+            CheckConnected();
+            // TODO: should this return false when tracking?
+            return m_mount.CanMoveAxis(Axis);
         }
 
         public bool CanPark
         {
             get
             {
-                tl.LogMessage("CanPark", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanPark;
             }
         }
 
@@ -402,8 +415,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanPulseGuide", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_camera.CanPulseGuide;
             }
         }
 
@@ -411,8 +424,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSetDeclinationRate", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSetDeclinationRate;
             }
         }
 
@@ -420,7 +433,6 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSetGuideRates", "Get - " + false.ToString());
                 return false;
             }
         }
@@ -429,8 +441,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSetPark", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSetPark;
             }
         }
 
@@ -438,8 +450,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSetPierSide", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSetPierSide;
             }
         }
 
@@ -447,8 +459,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSetRightAscensionRate", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSetRightAscensionRate;
             }
         }
 
@@ -456,8 +468,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSetTracking", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSetTracking;
             }
         }
 
@@ -465,8 +477,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSlew", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSlew;
             }
         }
 
@@ -474,8 +486,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSlewAltAz", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSlewAltAz;
             }
         }
 
@@ -483,8 +495,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSlewAltAzAsync", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSlewAltAzAsync;
             }
         }
 
@@ -492,8 +504,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSlewAsync", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSlewAsync;
             }
         }
 
@@ -501,8 +513,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSync", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSync;
             }
         }
 
@@ -510,8 +522,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanSyncAltAz", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanSyncAltAz;
             }
         }
 
@@ -519,8 +531,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                tl.LogMessage("CanUnpark", "Get - " + false.ToString());
-                return false;
+                CheckConnected();
+                return m_mount.CanUnpark;
             }
         }
 
@@ -528,9 +540,10 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                double declination = 0.0;
-                tl.LogMessage("Declination", "Get - " + utilities.DegreesToDMS(declination, ":", ":"));
-                return declination;
+                CheckConnected();
+                return Platform.IsTracking ?
+                    Platform.Declination :
+                    m_mount.Declination;
             }
         }
 
@@ -538,34 +551,33 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                double declination = 0.0;
-                tl.LogMessage("DeclinationRate", "Get - " + declination.ToString());
-                return declination;
+                CheckConnected();
+                return m_mount.DeclinationRate;
             }
             set
             {
-                tl.LogMessage("DeclinationRate Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("DeclinationRate", true);
+                CheckConnected();
+                m_mount.DeclinationRate = value;
             }
         }
 
         public PierSide DestinationSideOfPier(double RightAscension, double Declination)
         {
-            tl.LogMessage("DestinationSideOfPier Get", "Not implemented");
-            throw new ASCOM.PropertyNotImplementedException("DestinationSideOfPier", false);
+            CheckConnected();
+            return m_mount.DestinationSideOfPier(RightAscension, Declination);
         }
 
         public bool DoesRefraction
         {
             get
             {
-                tl.LogMessage("DoesRefraction Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("DoesRefraction", false);
+                CheckConnected();
+                return m_mount.DoesRefraction;
             }
             set
             {
-                tl.LogMessage("DoesRefraction Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("DoesRefraction", true);
+                CheckConnected();
+                m_mount.DoesRefraction = value;
             }
         }
 
@@ -573,6 +585,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 EquatorialCoordinateType equatorialSystem = EquatorialCoordinateType.equLocalTopocentric;
                 tl.LogMessage("DeclinationRate", "Get - " + equatorialSystem.ToString());
                 return equatorialSystem;
@@ -581,6 +594,7 @@ namespace ASCOM.EqPlatformAdapter
 
         public void FindHome()
         {
+            CheckConnected();
             tl.LogMessage("FindHome", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("FindHome");
         }
@@ -589,6 +603,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("FocalLength Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("FocalLength", false);
             }
@@ -598,11 +613,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("GuideRateDeclination Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("GuideRateDeclination", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("GuideRateDeclination Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("GuideRateDeclination", true);
             }
@@ -612,11 +629,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("GuideRateRightAscension Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("GuideRateRightAscension", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("GuideRateRightAscension Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("GuideRateRightAscension", true);
             }
@@ -626,6 +645,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("IsPulseGuiding Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("IsPulseGuiding", false);
             }
@@ -633,18 +653,21 @@ namespace ASCOM.EqPlatformAdapter
 
         public void MoveAxis(TelescopeAxes Axis, double Rate)
         {
+            CheckConnected();
             tl.LogMessage("MoveAxis", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("MoveAxis");
         }
 
         public void Park()
         {
+            CheckConnected();
             tl.LogMessage("Park", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("Park");
         }
 
         public void PulseGuide(GuideDirections Direction, int Duration)
         {
+            CheckConnected();
             tl.LogMessage("PulseGuide", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("PulseGuide");
         }
@@ -653,9 +676,10 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                double rightAscension = 0.0;
-                tl.LogMessage("RightAscension", "Get - " + utilities.HoursToHMS(rightAscension));
-                return rightAscension;
+                CheckConnected();
+                return Platform.IsTracking ?
+                    Platform.RightAscension :
+                    m_mount.RightAscension;
             }
         }
 
@@ -663,12 +687,14 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 double rightAscensionRate = 0.0;
                 tl.LogMessage("RightAscensionRate", "Get - " + rightAscensionRate.ToString());
                 return rightAscensionRate;
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("RightAscensionRate Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("RightAscensionRate", true);
             }
@@ -676,6 +702,7 @@ namespace ASCOM.EqPlatformAdapter
 
         public void SetPark()
         {
+            CheckConnected();
             tl.LogMessage("SetPark", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SetPark");
         }
@@ -684,11 +711,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("SideOfPier Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SideOfPier", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("SideOfPier Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SideOfPier", true);
             }
@@ -698,25 +727,8 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                // get greenwich sidereal time: https://en.wikipedia.org/wiki/Sidereal_time
-                //double siderealTime = (18.697374558 + 24.065709824419081 * (utilities.DateUTCToJulian(DateTime.UtcNow) - 2451545.0));
-
-                // alternative using NOVAS 3.1
-                double siderealTime = 0.0;
-                using (var novas = new ASCOM.Astrometry.NOVAS.NOVAS31())
-                {
-                    var jd = utilities.DateUTCToJulian(DateTime.UtcNow);
-                    novas.SiderealTime(jd, 0, novas.DeltaT(jd),
-                        ASCOM.Astrometry.GstType.GreenwichApparentSiderealTime,
-                        ASCOM.Astrometry.Method.EquinoxBased,
-                        ASCOM.Astrometry.Accuracy.Reduced, ref siderealTime);
-                }
-                // allow for the longitude
-                siderealTime += SiteLongitude / 360.0 * 24.0;
-                // reduce to the range 0 to 24 hours
-                siderealTime = siderealTime % 24.0;
-                tl.LogMessage("SiderealTime", "Get - " + siderealTime.ToString());
-                return siderealTime;
+                CheckConnected();
+                return m_mount.SiderealTime;
             }
         }
 
@@ -724,11 +736,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("SiteElevation Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SiteElevation", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("SiteElevation Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SiteElevation", true);
             }
@@ -738,11 +752,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("SiteLatitude Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SiteLatitude", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("SiteLatitude Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SiteLatitude", true);
             }
@@ -752,11 +768,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("SiteLongitude Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SiteLongitude", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("SiteLongitude Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SiteLongitude", true);
             }
@@ -766,11 +784,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("SlewSettleTime Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SlewSettleTime", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("SlewSettleTime Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("SlewSettleTime", true);
             }
@@ -778,36 +798,42 @@ namespace ASCOM.EqPlatformAdapter
 
         public void SlewToAltAz(double Azimuth, double Altitude)
         {
+            CheckConnected();
             tl.LogMessage("SlewToAltAz", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SlewToAltAz");
         }
 
         public void SlewToAltAzAsync(double Azimuth, double Altitude)
         {
+            CheckConnected();
             tl.LogMessage("SlewToAltAzAsync", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SlewToAltAzAsync");
         }
 
         public void SlewToCoordinates(double RightAscension, double Declination)
         {
+            CheckConnected();
             tl.LogMessage("SlewToCoordinates", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SlewToCoordinates");
         }
 
         public void SlewToCoordinatesAsync(double RightAscension, double Declination)
         {
+            CheckConnected();
             tl.LogMessage("SlewToCoordinatesAsync", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SlewToCoordinatesAsync");
         }
 
         public void SlewToTarget()
         {
+            CheckConnected();
             tl.LogMessage("SlewToTarget", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SlewToTarget");
         }
 
         public void SlewToTargetAsync()
         {
+            CheckConnected();
             tl.LogMessage("SlewToTargetAsync", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SlewToTargetAsync");
         }
@@ -816,6 +842,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("Slewing Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("Slewing", false);
             }
@@ -823,18 +850,21 @@ namespace ASCOM.EqPlatformAdapter
 
         public void SyncToAltAz(double Azimuth, double Altitude)
         {
+            CheckConnected();
             tl.LogMessage("SyncToAltAz", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SyncToAltAz");
         }
 
         public void SyncToCoordinates(double RightAscension, double Declination)
         {
+            CheckConnected();
             tl.LogMessage("SyncToCoordinates", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SyncToCoordinates");
         }
 
         public void SyncToTarget()
         {
+            CheckConnected();
             tl.LogMessage("SyncToTarget", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("SyncToTarget");
         }
@@ -843,11 +873,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("TargetDeclination Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("TargetDeclination", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("TargetDeclination Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("TargetDeclination", true);
             }
@@ -857,11 +889,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("TargetRightAscension Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("TargetRightAscension", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("TargetRightAscension Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("TargetRightAscension", true);
             }
@@ -871,12 +905,14 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 bool tracking = true;
                 tl.LogMessage("Tracking", "Get - " + tracking.ToString());
                 return tracking;
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("Tracking Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("Tracking", true);
             }
@@ -886,11 +922,13 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 tl.LogMessage("TrackingRate Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("TrackingRate", false);
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("TrackingRate Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("TrackingRate", true);
             }
@@ -900,6 +938,7 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 ITrackingRates trackingRates = new TrackingRates();
                 tl.LogMessage("TrackingRates", "Get - ");
                 foreach (DriveRates driveRate in trackingRates)
@@ -914,12 +953,14 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
+                CheckConnected();
                 DateTime utcDate = DateTime.UtcNow;
                 tl.LogMessage("TrackingRates", "Get - " + String.Format("MM/dd/yy HH:mm:ss", utcDate));
                 return utcDate;
             }
             set
             {
+                CheckConnected();
                 tl.LogMessage("UTCDate Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("UTCDate", true);
             }
@@ -927,6 +968,7 @@ namespace ASCOM.EqPlatformAdapter
 
         public void Unpark()
         {
+            CheckConnected();
             tl.LogMessage("Unpark", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("Unpark");
         }
@@ -958,6 +1000,11 @@ namespace ASCOM.EqPlatformAdapter
             {
                 throw new ASCOM.NotConnectedException(message);
             }
+        }
+
+        private void CheckConnected()
+        {
+            CheckConnected("Not connected");
         }
 
         /// <summary>

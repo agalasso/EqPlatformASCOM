@@ -23,7 +23,16 @@ namespace ASCOM.EqPlatformAdapter
 
         private void buttonChoose_Click(object sender, EventArgs e)
         {
-            Properties.Settings.Default.DriverId = ASCOM.DriverAccess.Telescope.Choose(Properties.Settings.Default.DriverId);
+            string choice = ASCOM.DriverAccess.Telescope.Choose(Properties.Settings.Default.DriverId);
+            if (choice != Properties.Settings.Default.DriverId)
+            {
+                Properties.Settings.Default.DriverId = choice;
+                if (driver != null)
+                {
+                    driver.Dispose();
+                    driver = null;
+                }
+            }
             SetUIState();
         }
 
@@ -35,8 +44,16 @@ namespace ASCOM.EqPlatformAdapter
             }
             else
             {
-                driver = new ASCOM.DriverAccess.Telescope(Properties.Settings.Default.DriverId);
-                driver.Connected = true;
+                try
+                {
+                    if (driver == null)
+                        driver = new ASCOM.DriverAccess.Telescope(Properties.Settings.Default.DriverId);
+                    driver.Connected = true;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Could not connect: " + ex.Message);
+                }
             }
             SetUIState();
         }

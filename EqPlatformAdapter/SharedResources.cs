@@ -105,6 +105,32 @@ namespace ASCOM.EqPlatformAdapter
             }
         }
 
+        public bool IsTracking
+        {
+            get
+            {
+                return m_state == TrackingStates.Tracking;
+            }
+        }
+
+        public double RightAscension
+        {
+            get
+            {
+                Debug.Assert(IsTracking);
+                return m_ra;
+            }
+        }
+
+        public double Declination
+        {
+            get
+            {
+                Debug.Assert(IsTracking);
+                return m_dec;
+            }
+        }
+
         public double StrokeSeconds
         {
             get
@@ -259,13 +285,30 @@ namespace ASCOM.EqPlatformAdapter
         static internal ASCOM.DriverAccess.Switch s_switch;
         static internal short s_switchIdx;
 
-        static internal Platform s_platform = new Platform();
+        static public readonly Platform s_platform = new Platform();
 
         static ASCOM.Utilities.TraceLogger s_tl;
         static uint s_tl_cnt;
 
         static uint s_cam_connections; // number of connections to (outer) Camera device
         static uint s_mount_connections; // number of connections to (outer) Telescope device
+
+        private static uint CamUseCnt
+        {
+            get
+            {
+                // camera and mount connections both reference the camera
+                return s_cam_connections + s_mount_connections;
+            }
+        }
+
+        private static uint MountUseCnt
+        {
+            get
+            {
+                return s_mount_connections;
+            }
+        }
 
         public static ASCOM.Utilities.TraceLogger GetTraceLogger()
         {
@@ -304,17 +347,45 @@ namespace ASCOM.EqPlatformAdapter
         private static void InstantiateCamera()
         {
             string cameraDriverId = GetCamDriverId();
+            if (cameraDriverId.Length == 0)
+                throw new InvalidOperationException("Missing camera selection");
             s_camera = new ASCOM.DriverAccess.Camera(cameraDriverId);
-            s_cam_connections = 0;
         }
 
         public static void FreeCamera()
         {
             lock (lockObject)
             {
+                Debug.Assert(CamUseCnt == 0);
+                if (s_camera != null)
+                {
+                    s_camera.Dispose();
+                    s_camera = null;
+                }
+            }
+        }
+
+        private static void ConnectCameraInner()
+        {
+            s_camera.Connected = true;
+            try
+            {
+                if (!s_camera.CanPulseGuide)
+                    throw new ASCOM.DriverException("The selected camera does not support pulse guiding");
+            }
+            catch (Exception)
+            {
+                try
+                {
+                    s_camera.Connected = false;
+                }
+                catch (Exception)
+                {
+                    // ignore
+                }
                 s_camera.Dispose();
                 s_camera = null;
-                s_cam_connections = 0;
+                throw;
             }
         }
 
@@ -330,28 +401,9 @@ namespace ASCOM.EqPlatformAdapter
                 if (s_camera == null)
                     InstantiateCamera();
 
-                if (s_cam_connections == 0)
+                if (CamUseCnt == 0)
                 {
-                    s_camera.Connected = true;
-                    try
-                    {
-                        if (!s_camera.CanPulseGuide)
-                            throw new ASCOM.DriverException("The selected camera does not support pulse guiding");
-                    }
-                    catch (Exception)
-                    {
-                        try
-                        {
-                            s_camera.Connected = false;
-                        }
-                        catch (Exception)
-                        {
-                            // ignore
-                        }
-                        s_camera.Dispose();
-                        s_camera = null;
-                        throw;
-                    }
+                    ConnectCameraInner();
                     updateForm = true;
                 }
 
@@ -375,6 +427,18 @@ namespace ASCOM.EqPlatformAdapter
             }
         }
 
+        private static void DisconnectCameraInner()
+        {
+            try
+            {
+                s_camera.Connected = false;
+            }
+            catch (Exception)
+            {
+                // ignore it
+            }
+        }
+
         public static void DisconnectCamera()
         {
             lock (lockObject)
@@ -382,17 +446,8 @@ namespace ASCOM.EqPlatformAdapter
                 if (s_cam_connections == 0)
                     throw new InvalidOperationException("disconnecting camera when not connected");
 
-                if (--s_cam_connections == 0)
-                {
-                    try
-                    {
-                        s_camera.Connected = false;
-                    }
-                    catch (Exception)
-                    {
-                        // ignore it
-                    }
-                }
+                if (--s_cam_connections == 0 && CamUseCnt == 0)
+                    DisconnectCameraInner();
             }
 
             Server.MainForm.UpdateState();
@@ -403,7 +458,7 @@ namespace ASCOM.EqPlatformAdapter
             using (Settings settings = new Settings())
             {
                 string val = settings.Get("scopeId");
-                if (val == null || val.Length == 0)
+                if (String.IsNullOrEmpty(val))
                     throw new ASCOM.DriverException("Missing ASCOM Telescope Device selection");
                 mountDriverId = val;
 
@@ -421,6 +476,9 @@ namespace ASCOM.EqPlatformAdapter
             string mountDriverId, switchDriverId;
             short switchIdx;
             GetMountDriverIds(out mountDriverId, out switchDriverId, out switchIdx);
+
+            if (mountDriverId.Length == 0)
+                throw new InvalidOperationException("Missing mount selection");
 
             ASCOM.DriverAccess.Telescope mount = null;
             ASCOM.DriverAccess.Switch sw = null;
@@ -441,7 +499,6 @@ namespace ASCOM.EqPlatformAdapter
             }
 
             s_mount = mount;
-            s_mount_connections = 0;
             s_switch = sw;
             s_switchIdx = switchIdx;
         }
@@ -450,20 +507,45 @@ namespace ASCOM.EqPlatformAdapter
         {
             lock (lockObject)
             {
-                s_mount.Dispose();
-                s_mount = null;
+                Debug.Assert(MountUseCnt == 0);
+
+                if (s_mount != null)
+                {
+                    s_mount.Dispose();
+                    s_mount = null;
+                }
 
                 if (s_switch != null)
                 {
                     s_switch.Dispose();
                     s_switch = null;
                 }
-
-                s_mount_connections = 0;
             }
         }
 
-        public static ASCOM.DriverAccess.Telescope ConnectMount(out ASCOM.DriverAccess.Switch outSw, out short outSwitchIdx)
+        static void ConnectMountInner()
+        {
+            s_mount.Connected = true;
+            try
+            {
+                if (s_switch != null)
+                    s_switch.Connected = true;
+            }
+            catch (Exception)
+            {
+                try
+                {
+                    s_mount.Connected = false;
+                }
+                catch (Exception)
+                {
+                    // ignore it
+                }
+                throw;
+            }
+        }
+
+        public static ASCOM.DriverAccess.Telescope ConnectMount(out ASCOM.DriverAccess.Camera outCam)
         {
             bool updateForm = false;
 
@@ -472,24 +554,20 @@ namespace ASCOM.EqPlatformAdapter
                 if (s_mount == null)
                     InstantiateMount();
 
-                if (s_mount_connections == 0)
+                if (s_camera == null)
+                    InstantiateCamera();
+
+                if (MountUseCnt == 0)
                 {
-                    s_mount.Connected = true;
+                    ConnectMountInner();
                     try
                     {
-                        if (s_switch != null)
-                            s_switch.Connected = true;
+                        if (s_cam_connections == 0)
+                            ConnectCameraInner();
                     }
                     catch (Exception)
                     {
-                        try
-                        {
-                            s_mount.Connected = false;
-                        }
-                        catch (Exception)
-                        {
-                            // ignore it
-                        }
+                        DisconnectMountInner();
                         throw;
                     }
                     updateForm = true;
@@ -501,8 +579,7 @@ namespace ASCOM.EqPlatformAdapter
             if (updateForm)
                 Server.MainForm.UpdateState();
 
-            outSw = s_switch;
-            outSwitchIdx = s_switchIdx;
+            outCam = s_camera;
             return s_mount;
         }
 
@@ -517,6 +594,30 @@ namespace ASCOM.EqPlatformAdapter
             }
         }
 
+        private static void DisconnectMountInner()
+        {
+            try
+            {
+                s_mount.Connected = false;
+            }
+            catch (Exception)
+            {
+                // ignore it
+            }
+
+            if (s_switch != null)
+            {
+                try
+                {
+                    s_switch.Connected = false;
+                }
+                catch (Exception)
+                {
+                    // ignore it
+                }
+            }
+        }
+
         public static void DisconnectMount()
         {
             lock (lockObject)
@@ -526,28 +627,8 @@ namespace ASCOM.EqPlatformAdapter
 
                 if (--s_mount_connections == 0)
                 {
+                    DisconnectMountInner();
                     s_platform.Init();
-
-                    try
-                    {
-                        s_mount.Connected = false;
-                    }
-                    catch (Exception)
-                    {
-                        // ignore it
-                    }
-
-                    if (s_switch != null)
-                    {
-                        try
-                        {
-                            s_switch.Connected = false;
-                        }
-                        catch (Exception)
-                        {
-                            // ignore it
-                        }
-                    }
                 }
             }
 
