@@ -39,6 +39,10 @@ namespace ASCOM.EqPlatformAdapter
         {
             this.components = new System.ComponentModel.Container();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.btnReset = new System.Windows.Forms.Button();
+            this.btnResume = new System.Windows.Forms.Button();
+            this.btnPause = new System.Windows.Forms.Button();
+            this.btnStart = new System.Windows.Forms.Button();
             this.platformStatus = new System.Windows.Forms.TextBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
             this.setupCam = new System.Windows.Forms.Button();
@@ -57,10 +61,7 @@ namespace ASCOM.EqPlatformAdapter
             this.label1 = new System.Windows.Forms.Label();
             this.toolTip1 = new System.Windows.Forms.ToolTip(this.components);
             this.statusTimer = new System.Windows.Forms.Timer(this.components);
-            this.btnStart = new System.Windows.Forms.Button();
-            this.btnPause = new System.Windows.Forms.Button();
-            this.btnResume = new System.Windows.Forms.Button();
-            this.btnReset = new System.Windows.Forms.Button();
+            this.cbTrace = new System.Windows.Forms.CheckBox();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.groupBox3.SuspendLayout();
@@ -81,6 +82,50 @@ namespace ASCOM.EqPlatformAdapter
             this.groupBox1.TabIndex = 0;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Platform Tracking";
+            // 
+            // btnReset
+            // 
+            this.btnReset.Enabled = false;
+            this.btnReset.Location = new System.Drawing.Point(285, 26);
+            this.btnReset.Name = "btnReset";
+            this.btnReset.Size = new System.Drawing.Size(71, 41);
+            this.btnReset.TabIndex = 9;
+            this.btnReset.Text = "Rese&t";
+            this.btnReset.UseVisualStyleBackColor = true;
+            this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
+            // 
+            // btnResume
+            // 
+            this.btnResume.Enabled = false;
+            this.btnResume.Location = new System.Drawing.Point(197, 26);
+            this.btnResume.Name = "btnResume";
+            this.btnResume.Size = new System.Drawing.Size(71, 41);
+            this.btnResume.TabIndex = 8;
+            this.btnResume.Text = "&Resume";
+            this.btnResume.UseVisualStyleBackColor = true;
+            this.btnResume.Click += new System.EventHandler(this.btnResume_Click);
+            // 
+            // btnPause
+            // 
+            this.btnPause.Enabled = false;
+            this.btnPause.Location = new System.Drawing.Point(109, 26);
+            this.btnPause.Name = "btnPause";
+            this.btnPause.Size = new System.Drawing.Size(71, 41);
+            this.btnPause.TabIndex = 7;
+            this.btnPause.Text = "&Pause";
+            this.btnPause.UseVisualStyleBackColor = true;
+            this.btnPause.Click += new System.EventHandler(this.btnPause_Click);
+            // 
+            // btnStart
+            // 
+            this.btnStart.Enabled = false;
+            this.btnStart.Location = new System.Drawing.Point(21, 26);
+            this.btnStart.Name = "btnStart";
+            this.btnStart.Size = new System.Drawing.Size(71, 41);
+            this.btnStart.TabIndex = 6;
+            this.btnStart.Text = "&Start";
+            this.btnStart.UseVisualStyleBackColor = true;
+            this.btnStart.Click += new System.EventHandler(this.btnStart_Click);
             // 
             // platformStatus
             // 
@@ -267,45 +312,16 @@ namespace ASCOM.EqPlatformAdapter
             this.statusTimer.Interval = 500;
             this.statusTimer.Tick += new System.EventHandler(this.statusTimer_Tick);
             // 
-            // btnStart
+            // cbTrace
             // 
-            this.btnStart.Location = new System.Drawing.Point(21, 26);
-            this.btnStart.Name = "btnStart";
-            this.btnStart.Size = new System.Drawing.Size(71, 41);
-            this.btnStart.TabIndex = 6;
-            this.btnStart.Text = "&Start";
-            this.btnStart.UseVisualStyleBackColor = true;
-            this.btnStart.Click += new System.EventHandler(this.btnStart_Click);
-            // 
-            // btnPause
-            // 
-            this.btnPause.Location = new System.Drawing.Point(109, 26);
-            this.btnPause.Name = "btnPause";
-            this.btnPause.Size = new System.Drawing.Size(71, 41);
-            this.btnPause.TabIndex = 7;
-            this.btnPause.Text = "&Pause";
-            this.btnPause.UseVisualStyleBackColor = true;
-            this.btnPause.Click += new System.EventHandler(this.btnPause_Click);
-            // 
-            // btnResume
-            // 
-            this.btnResume.Location = new System.Drawing.Point(197, 26);
-            this.btnResume.Name = "btnResume";
-            this.btnResume.Size = new System.Drawing.Size(71, 41);
-            this.btnResume.TabIndex = 8;
-            this.btnResume.Text = "&Resume";
-            this.btnResume.UseVisualStyleBackColor = true;
-            this.btnResume.Click += new System.EventHandler(this.btnResume_Click);
-            // 
-            // btnReset
-            // 
-            this.btnReset.Location = new System.Drawing.Point(285, 26);
-            this.btnReset.Name = "btnReset";
-            this.btnReset.Size = new System.Drawing.Size(71, 41);
-            this.btnReset.TabIndex = 9;
-            this.btnReset.Text = "Rese&t";
-            this.btnReset.UseVisualStyleBackColor = true;
-            this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
+            this.cbTrace.AutoSize = true;
+            this.cbTrace.Location = new System.Drawing.Point(302, 144);
+            this.cbTrace.Name = "cbTrace";
+            this.cbTrace.Size = new System.Drawing.Size(69, 17);
+            this.cbTrace.TabIndex = 6;
+            this.cbTrace.Text = "Trace on";
+            this.cbTrace.UseVisualStyleBackColor = true;
+            this.cbTrace.CheckedChanged += new System.EventHandler(this.cbTrace_CheckedChanged);
             // 
             // MainForm
             // 
@@ -313,6 +329,7 @@ namespace ASCOM.EqPlatformAdapter
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.Control;
             this.ClientSize = new System.Drawing.Size(416, 467);
+            this.Controls.Add(this.cbTrace);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.stroke);
             this.Controls.Add(this.groupBox4);
@@ -363,6 +380,7 @@ namespace ASCOM.EqPlatformAdapter
         private System.Windows.Forms.Button btnResume;
         private System.Windows.Forms.Button btnPause;
         private System.Windows.Forms.Button btnStart;
+        private System.Windows.Forms.CheckBox cbTrace;
     }
 }
 

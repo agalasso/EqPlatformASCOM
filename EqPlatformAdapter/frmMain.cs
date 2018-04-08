@@ -89,6 +89,11 @@ namespace ASCOM.EqPlatformAdapter
                 this.stroke.Value = (decimal) val;
             }
 
+            string s = settings.Get("traceOn", false.ToString());
+            bool trace = false;
+            Boolean.TryParse(s, out trace);
+            cbTrace.Checked = trace;
+
             camName.Text = DeviceName("Camera", settings.Get("cameraId"));
             mountName.Text = DeviceName("Telescope", settings.Get("scopeId"));
             switchDriverName.Text = DeviceName("Switch", settings.Get("switchDriverId"));
@@ -252,6 +257,12 @@ namespace ASCOM.EqPlatformAdapter
         private void btnReset_Click(object sender, EventArgs e)
         {
             SharedResources.s_platform.Reset();
+        }
+
+        private void cbTrace_CheckedChanged(object sender, EventArgs e)
+        {
+            bool enable = cbTrace.Checked;
+            SharedResources.EnableLogging(enable);
         }
     }
 }

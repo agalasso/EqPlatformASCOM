@@ -27,7 +27,6 @@ namespace ASCOM.EqPlatformAdapter
         {
             // Place any validation constraint checks here
             // Update the state variables with results from the dialogue
-            m_scope.tl.Enabled = chkTrace.Checked;
         }
 
         private void cmdCancel_Click(object sender, EventArgs e) // Cancel button event handler
@@ -54,7 +53,6 @@ namespace ASCOM.EqPlatformAdapter
 
         private void InitUI()
         {
-            chkTrace.Checked = m_scope.tl.Enabled;
         }
     }
 }

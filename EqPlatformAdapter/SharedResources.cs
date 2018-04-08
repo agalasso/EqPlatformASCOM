@@ -131,6 +131,13 @@ namespace ASCOM.EqPlatformAdapter
             }
         }
 
+        public void SyncToCoordinates(double ra, double dec)
+        {
+            Debug.Assert(IsTracking);
+            m_ra = ra;
+            m_dec = dec;
+        }
+
         public double StrokeSeconds
         {
             get
@@ -333,6 +340,19 @@ namespace ASCOM.EqPlatformAdapter
                     s_tl.Dispose();
                     s_tl = null;
                 }
+            }
+        }
+
+        public static void EnableLogging(bool val)
+        {
+            lock (lockObject)
+            {
+                if (s_tl != null)
+                    s_tl.Enabled = val;
+            }
+            using (Settings settings = new Settings())
+            {
+                settings.Set("traceOn", val.ToString());
             }
         }
 

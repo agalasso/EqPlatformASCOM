@@ -143,18 +143,9 @@ namespace ASCOM.EqPlatformAdapter
         /// </summary>
         public void SetupDialog()
         {
-            // consider only showing the setup dialog if not connected
-            // or call a different dialog if connected
-            if (IsConnected)
-                System.Windows.Forms.MessageBox.Show("Already connected, just press OK");
-
             using (SetupDialogForm F = new SetupDialogForm(this))
             {
-                var result = F.ShowDialog();
-                if (result == System.Windows.Forms.DialogResult.OK)
-                {
-                    WriteProfile(); // Persist device configuration values to the ASCOM Profile store
-                }
+                F.ShowDialog();
             }
         }
 
@@ -301,11 +292,16 @@ namespace ASCOM.EqPlatformAdapter
             }
         }
 
-        private void InitTransform()
+        private void InitTransformSite()
         {
             transform.SiteElevation = m_mount.SiteElevation;
             transform.SiteLatitude = m_mount.SiteLatitude;
             transform.SiteLongitude = m_mount.SiteLongitude;
+        }
+
+        private void InitTransform()
+        {
+            InitTransformSite();
             transform.SetTopocentric(Platform.RightAscension, Platform.Declination);
         }
 
@@ -586,17 +582,16 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                EquatorialCoordinateType equatorialSystem = EquatorialCoordinateType.equLocalTopocentric;
-                tl.LogMessage("DeclinationRate", "Get - " + equatorialSystem.ToString());
-                return equatorialSystem;
+                return m_mount.EquatorialSystem;
             }
         }
 
         public void FindHome()
         {
             CheckConnected();
-            tl.LogMessage("FindHome", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("FindHome");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot FindHome when platform is tracking");
+            m_mount.FindHome();
         }
 
         public double FocalLength
@@ -604,8 +599,7 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("FocalLength Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("FocalLength", false);
+                return m_mount.FocalLength;
             }
         }
 
@@ -627,15 +621,14 @@ namespace ASCOM.EqPlatformAdapter
 
         public double GuideRateRightAscension
         {
+            // guide rate is determined by the platform, no way to set or get it
             get
             {
-                CheckConnected();
                 tl.LogMessage("GuideRateRightAscension Get", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("GuideRateRightAscension", false);
             }
             set
             {
-                CheckConnected();
                 tl.LogMessage("GuideRateRightAscension Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("GuideRateRightAscension", true);
             }
@@ -646,30 +639,110 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("IsPulseGuiding Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("IsPulseGuiding", false);
+                return Platform.IsTracking ? m_camera.IsPulseGuiding : false;
             }
         }
 
         public void MoveAxis(TelescopeAxes Axis, double Rate)
         {
             CheckConnected();
-            tl.LogMessage("MoveAxis", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("MoveAxis");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot MoveAxis when platform is tracking");
+            m_mount.MoveAxis(Axis, Rate);
         }
 
         public void Park()
         {
             CheckConnected();
-            tl.LogMessage("Park", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("Park");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot Park when platform is tracking");
+            m_mount.Park();
+        }
+
+        private void TransformGuidePulse(double raAmt, double decAmt, out double st4raAmt, out double st4decAmt)
+        {
+            // TODO-Thomas - here is where the transformation code can go
+            //
+            //  input parameters:
+            //      raAmt
+            //      decAmt
+            //          pulse duration (milliseconds) from PHD2; one or the other of these will be zero
+            //
+            //  output:
+            //      st4raAmt
+            //      st4decAmt
+            //          pulses durations (milliseconds) to send to the mount
+
+            // scope pointing context information you may need is available as:
+            double ra = Platform.RightAscension;
+            double dec = Platform.Declination;
+            double latitude = m_mount.SiteLatitude;
+            double longitude = m_mount.SiteLongitude;
+            double lst = m_mount.SiderealTime; // local apparent sidereal time
+            double hourAngle = (lst - ra * 24.0 / 360.0) % 24.0;
+            InitTransform(); // call this before getting alt/az
+            double altitude = transform.ElevationTopocentric;
+            double azimuth = transform.AzimuthTopocentric;
+
+            // identity transform
+            st4raAmt = raAmt;
+            st4decAmt = decAmt;
         }
 
         public void PulseGuide(GuideDirections Direction, int Duration)
         {
             CheckConnected();
-            tl.LogMessage("PulseGuide", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("PulseGuide");
+            if (!Platform.IsTracking)
+                throw new InvalidOperationException("cannot PulseGuide when platform is not tracking");
+
+            double ra = 0.0, dec = 0.0;
+
+            switch (Direction)
+            {
+                case GuideDirections.guideEast: ra = (double)Duration; break;
+                case GuideDirections.guideWest: ra = (double)-Duration; break;
+                case GuideDirections.guideNorth: dec = (double)Duration; break;
+                case GuideDirections.guideSouth: dec = (double)-Duration; break;
+            }
+
+            double st4ra, st4dec;
+            TransformGuidePulse(ra, dec, out st4ra, out st4dec);
+
+            // issue the RA pulse
+
+            GuideDirections dir;
+            if (st4ra >= 0.0)
+                dir = GuideDirections.guideEast;
+            else
+                dir = GuideDirections.guideWest;
+
+            int dur = (int)(Math.Abs(st4ra) + 0.5);
+            if (dur > 0)
+            {
+                m_camera.PulseGuide(dir, dur);
+                System.Threading.Thread.Sleep(dur + 10);
+                Stopwatch stopwatch = Stopwatch.StartNew();
+                while (m_camera.IsPulseGuiding)
+                {
+                    if (stopwatch.ElapsedMilliseconds > 5000 + dur)
+                        throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
+                    System.Threading.Thread.Sleep(10);
+                }            
+            }
+
+            // issue the dec pulse
+
+            if (st4dec >= 0.0)
+                dir = GuideDirections.guideNorth;
+            else
+                dir = GuideDirections.guideSouth;
+
+            dur = (int)(Math.Abs(st4dec) + 0.5);
+            if (dur > 0)
+            {
+                m_camera.PulseGuide(dir, dur);
+                // return right away
+            }
         }
 
         public double RightAscension
@@ -688,23 +761,19 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                double rightAscensionRate = 0.0;
-                tl.LogMessage("RightAscensionRate", "Get - " + rightAscensionRate.ToString());
-                return rightAscensionRate;
+                return m_mount.RightAscensionRate;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("RightAscensionRate Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("RightAscensionRate", true);
+                m_mount.RightAscensionRate = value;
             }
         }
 
         public void SetPark()
         {
             CheckConnected();
-            tl.LogMessage("SetPark", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SetPark");
+            m_mount.SetPark();
         }
 
         public PierSide SideOfPier
@@ -712,14 +781,12 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("SideOfPier Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SideOfPier", false);
+                return m_mount.SideOfPier;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("SideOfPier Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SideOfPier", true);
+                m_mount.SideOfPier = value;
             }
         }
 
@@ -737,14 +804,12 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("SiteElevation Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SiteElevation", false);
+                return m_mount.SiteElevation;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("SiteElevation Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SiteElevation", true);
+                m_mount.SiteElevation = value;
             }
         }
 
@@ -753,14 +818,12 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("SiteLatitude Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SiteLatitude", false);
+                return m_mount.SiteLatitude;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("SiteLatitude Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SiteLatitude", true);
+                m_mount.SiteLatitude = value;
             }
         }
 
@@ -769,14 +832,12 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("SiteLongitude Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SiteLongitude", false);
+                return m_mount.SiteLongitude;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("SiteLongitude Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SiteLongitude", true);
+                m_mount.SiteLongitude = value;
             }
         }
 
@@ -785,57 +846,61 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("SlewSettleTime Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SlewSettleTime", false);
+                return m_mount.SlewSettleTime;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("SlewSettleTime Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SlewSettleTime", true);
+                m_mount.SlewSettleTime = value;
             }
         }
 
         public void SlewToAltAz(double Azimuth, double Altitude)
         {
             CheckConnected();
-            tl.LogMessage("SlewToAltAz", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SlewToAltAz");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot SlewToAltAz when platform is tracking");
+            m_mount.SlewToAltAz(Azimuth, Altitude);
         }
 
         public void SlewToAltAzAsync(double Azimuth, double Altitude)
         {
             CheckConnected();
-            tl.LogMessage("SlewToAltAzAsync", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SlewToAltAzAsync");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot SlewToAltAzAsync when platform is tracking");
+            m_mount.SlewToAltAzAsync(Azimuth, Altitude);
         }
 
         public void SlewToCoordinates(double RightAscension, double Declination)
         {
             CheckConnected();
-            tl.LogMessage("SlewToCoordinates", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SlewToCoordinates");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot SlewToCoordinates when platform is tracking");
+            m_mount.SlewToCoordinates(RightAscension, Declination);
         }
 
         public void SlewToCoordinatesAsync(double RightAscension, double Declination)
         {
             CheckConnected();
-            tl.LogMessage("SlewToCoordinatesAsync", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SlewToCoordinatesAsync");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot SlewToCoordinatesAsync when platform is tracking");
+            m_mount.SlewToCoordinatesAsync(RightAscension, Declination);
         }
 
         public void SlewToTarget()
         {
             CheckConnected();
-            tl.LogMessage("SlewToTarget", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SlewToTarget");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot SlewToTarget when platform is tracking");
+            m_mount.SlewToTarget();
         }
 
         public void SlewToTargetAsync()
         {
             CheckConnected();
-            tl.LogMessage("SlewToTargetAsync", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SlewToTargetAsync");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot SlewToTargetAsync when platform is tracking");
+            m_mount.SlewToTargetAsync();
         }
 
         public bool Slewing
@@ -843,30 +908,38 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("Slewing Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Slewing", false);
+                return m_mount.Slewing;
             }
         }
 
         public void SyncToAltAz(double Azimuth, double Altitude)
         {
             CheckConnected();
-            tl.LogMessage("SyncToAltAz", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SyncToAltAz");
+            if (Platform.IsTracking)
+            {
+                InitTransformSite();
+                transform.SetAzimuthElevation(Azimuth, Altitude);
+                Platform.SyncToCoordinates(transform.RATopocentric, transform.DECTopocentric);
+            }
+            else
+                m_mount.SyncToAltAz(Azimuth, Altitude);
         }
 
         public void SyncToCoordinates(double RightAscension, double Declination)
         {
-            CheckConnected();
-            tl.LogMessage("SyncToCoordinates", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SyncToCoordinates");
+            if (Platform.IsTracking)
+                Platform.SyncToCoordinates(RightAscension, Declination);
+            else
+                m_mount.SyncToCoordinates(RightAscension, Declination);
         }
 
         public void SyncToTarget()
         {
             CheckConnected();
-            tl.LogMessage("SyncToTarget", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("SyncToTarget");
+            if (Platform.IsTracking)
+                Platform.SyncToCoordinates(m_mount.TargetRightAscension, m_mount.TargetDeclination);
+            else
+                m_mount.SyncToTarget();
         }
 
         public double TargetDeclination
@@ -874,14 +947,12 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("TargetDeclination Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("TargetDeclination", false);
+                return m_mount.TargetDeclination;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("TargetDeclination Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("TargetDeclination", true);
+                m_mount.TargetDeclination = value;
             }
         }
 
@@ -890,14 +961,12 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("TargetRightAscension Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("TargetRightAscension", false);
+                return m_mount.TargetRightAscension;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("TargetRightAscension Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("TargetRightAscension", true);
+                m_mount.TargetRightAscension = value;
             }
         }
 
@@ -906,15 +975,23 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                bool tracking = true;
-                tl.LogMessage("Tracking", "Get - " + tracking.ToString());
-                return tracking;
+                return Platform.IsTracking ? true : m_mount.Tracking;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("Tracking Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Tracking", true);
+                if (value)
+                {
+                    if (Platform.IsTracking || m_mount.Tracking)
+                        return;
+                    m_mount.Tracking = true;
+                }
+                else
+                {
+                    if (Platform.IsTracking)
+                        Platform.StopTracking();
+                    m_mount.Tracking = false;
+                }
             }
         }
 
@@ -923,14 +1000,14 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                tl.LogMessage("TrackingRate Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("TrackingRate", false);
+                return Platform.IsTracking ? DriveRates.driveSidereal : m_mount.TrackingRate;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("TrackingRate Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("TrackingRate", true);
+                if (Platform.IsTracking)
+                    throw new InvalidOperationException("cannot set TrackingRate when platform is tracking");
+                m_mount.TrackingRate = value;
             }
         }
 
@@ -939,13 +1016,7 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                ITrackingRates trackingRates = new TrackingRates();
-                tl.LogMessage("TrackingRates", "Get - ");
-                foreach (DriveRates driveRate in trackingRates)
-                {
-                    tl.LogMessage("TrackingRates", "Get - " + driveRate.ToString());
-                }
-                return trackingRates;
+                return m_mount.TrackingRates; // guaranteed to include sidereal rate
             }
         }
 
@@ -954,23 +1025,21 @@ namespace ASCOM.EqPlatformAdapter
             get
             {
                 CheckConnected();
-                DateTime utcDate = DateTime.UtcNow;
-                tl.LogMessage("TrackingRates", "Get - " + String.Format("MM/dd/yy HH:mm:ss", utcDate));
-                return utcDate;
+                return m_mount.UTCDate;
             }
             set
             {
                 CheckConnected();
-                tl.LogMessage("UTCDate Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("UTCDate", true);
+                m_mount.UTCDate = value;
             }
         }
 
         public void Unpark()
         {
             CheckConnected();
-            tl.LogMessage("Unpark", "Not implemented");
-            throw new ASCOM.MethodNotImplementedException("Unpark");
+            if (Platform.IsTracking)
+                throw new InvalidOperationException("cannot Unpark when platform is tracking");
+            m_mount.Unpark();
         }
 
         #endregion
