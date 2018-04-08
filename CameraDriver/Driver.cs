@@ -1,29 +1,25 @@
-//tabs=4
-// --------------------------------------------------------------------------------
-// TODO fill in this information for your driver, then remove this line!
-//
-// ASCOM Camera driver for EqPlatformAdapter
-//
-// Description:	Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam 
-//				nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam 
-//				erat, sed diam voluptua. At vero eos et accusam et justo duo 
-//				dolores et ea rebum. Stet clita kasd gubergren, no sea takimata 
-//				sanctus est Lorem ipsum dolor sit amet.
-//
-// Implements:	ASCOM Camera interface version: <To be completed by driver developer>
-// Author:		(XXX) Your N. Here <your@email.here>
-//
-// Edit Log:
-//
-// Date			Who	Vers	Description
-// -----------	---	-----	-------------------------------------------------------
-// dd-mmm-yyyy	XXX	6.0.0	Initial edit, created from ASCOM driver template
-// --------------------------------------------------------------------------------
-//
-
+/*
+ * This file is part of EqPlatform Adapter ASCOM Driver.
+ * 
+ * Copyright 2018 Andy Galasso <andy.galasso@gmail.com>
+ * 
+ *  EqPlatform Adapter ASCOM Driver is free software: you can redistribute it
+ *  and/or modify it under the terms of the GNU Lesser General Public License
+ *  as published by the Free Software Foundation, either version 3 of the License,
+ *  or (at your option) any later version.
+ *  
+ *  EqPlatform Adapter ASCOM Driver is distributed in the hope that it will be
+ *  useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General
+ *  Public License for more details.
+ *  
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with EqPlatform Adapter ASCOM Driver.  If not, see
+ *  <http://www.gnu.org/licenses/>.
+ */
 
 // This is used to define code in the template that is specific to one class implementation
-// unused code canbe deleted and this definition removed.
+// unused code can be deleted and this definition removed.
 #define Camera
 
 using System;

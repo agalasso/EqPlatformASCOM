@@ -1,3 +1,22 @@
+/*
+ * This file is part of EqPlatform Adapter ASCOM Driver.
+ * 
+ * Copyright 2018 Andy Galasso <andy.galasso@gmail.com>
+ * 
+ *  EqPlatform Adapter ASCOM Driver is free software: you can redistribute it
+ *  and/or modify it under the terms of the GNU Lesser General Public License
+ *  as published by the Free Software Foundation, either version 3 of the License,
+ *  or (at your option) any later version.
+ *  
+ *  EqPlatform Adapter ASCOM Driver is distributed in the hope that it will be
+ *  useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General
+ *  Public License for more details.
+ *  
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with EqPlatform Adapter ASCOM Driver.  If not, see
+ *  <http://www.gnu.org/licenses/>.
+ */
 //
 // ================
 // Shared Resources
@@ -5,13 +24,6 @@
 //
 // This class is a container for all shared resources that may be needed
 // by the drivers served by the Local Server. 
-//
-// NOTES:
-//
-//	* ALL DECLARATIONS MUST BE STATIC HERE!! INSTANCES OF THIS CLASS MUST NEVER BE CREATED!
-//
-// Written by:	Bob Denny	29-May-2007
-// Modified by Chris Rowland and Peter Simpson to hamdle multiple hardware devices March 2011
 //
 using System;
 using System.Diagnostics;
