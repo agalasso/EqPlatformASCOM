@@ -195,12 +195,12 @@ namespace ASCOM.EqPlatformAdapter
         {
             get
             {
-                LogMessage("Connected", "Get {0}", IsConnected);
+                tl.LogMessage("Connected", String.Format("Get {0}", IsConnected));
                 return IsConnected;
             }
             set
             {
-                tl.LogMessage("Connected", "Set {0}", value);
+                tl.LogMessage("Connected", String.Format("Set {0}", value));
                 if (value == IsConnected)
                     return;
 
@@ -649,6 +649,8 @@ namespace ASCOM.EqPlatformAdapter
 
         private void TransformGuidePulse(double raAmt, double decAmt, out double st4raAmt, out double st4decAmt)
         {
+            tl.LogMessage("TransformGuidePulse", String.Format("raAmt={0:F1} ms decAmt={1:F1} ms", raAmt, decAmt));
+
             // TODO-Thomas - here is where the transformation code can go
             //
             //  input parameters:
@@ -667,7 +669,7 @@ namespace ASCOM.EqPlatformAdapter
             double latitude = m_mount.SiteLatitude;
             double longitude = m_mount.SiteLongitude;
             double lst = m_mount.SiderealTime; // local apparent sidereal time
-            double hourAngle = (lst - ra * 24.0 / 360.0) % 24.0;
+            double hourAngle = (lst - ra) % 24.0;
             InitTransform(); // call this before getting alt/az
             double altitude = transform.ElevationTopocentric;
             double azimuth = transform.AzimuthTopocentric;

@@ -336,6 +336,14 @@ namespace ASCOM.EqPlatformAdapter
                 if (s_tl == null)
                 {
                     s_tl = new ASCOM.Utilities.TraceLogger("", "EqPlatformAdapter");
+
+                    using (Settings settings = new Settings())
+                    {
+                        string s = settings.Get("traceOn", false.ToString());
+                        bool trace = false;
+                        Boolean.TryParse(s, out trace);
+                        s_tl.Enabled = trace;
+                    }
                 }
                 ++s_tl_cnt;
                 return s_tl;
@@ -359,9 +367,18 @@ namespace ASCOM.EqPlatformAdapter
         {
             lock (lockObject)
             {
-                if (s_tl != null)
+                if (s_tl != null && s_tl.Enabled != val)
+                {
+                    if (!val)
+                        s_tl.LogMessage("Server", "Logging disabled");
+
                     s_tl.Enabled = val;
+
+                    if (val)
+                        s_tl.LogMessage("Server", "Logging enabled");
+                }
             }
+
             using (Settings settings = new Settings())
             {
                 settings.Set("traceOn", val.ToString());
