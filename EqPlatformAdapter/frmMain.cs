@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This file is part of EqPlatform Adapter ASCOM Driver.
  * 
  * Copyright 2018 Andy Galasso <andy.galasso@gmail.com>
@@ -34,6 +34,7 @@ namespace ASCOM.EqPlatformAdapter
         public MainForm()
         {
             InitializeComponent();
+            expand.Text = "Settings ▼";
         }
 
         private string DeviceName(string deviceType, string driverId)
@@ -286,6 +287,20 @@ namespace ASCOM.EqPlatformAdapter
                 {
                     e.Cancel = true;
                 }
+            }
+        }
+
+        private void expand_Click(object sender, EventArgs e)
+        {
+            if (settingsPanel.Visible)
+            {
+                settingsPanel.Visible = false;
+                expand.Text = "Settings ▼";
+            }
+            else
+            {
+                settingsPanel.Visible = true;
+                expand.Text = "▲";
             }
         }
     }
