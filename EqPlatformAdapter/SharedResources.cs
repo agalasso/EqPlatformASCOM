@@ -660,6 +660,8 @@ namespace ASCOM.EqPlatformAdapter
                 if (--s_mount_connections == 0)
                 {
                     DisconnectMountInner();
+                    if (CamUseCnt == 0)
+                        DisconnectCameraInner();
                     s_platform.Init();
                 }
             }
