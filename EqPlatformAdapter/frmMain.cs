@@ -152,6 +152,14 @@ namespace ASCOM.EqPlatformAdapter
             LoadSwitches();
         }
 
+        private void clearSwitch_Click(object sender, EventArgs e)
+        {
+            settings.Set("switchDriverId", String.Empty);
+            switchDriverName.Text = DeviceName("Switch", String.Empty);
+            SharedResources.FreeMount();
+            LoadSwitches();
+        }
+
         private void setupMount_Click(object sender, EventArgs e)
         {
             SharedResources.SetupMount();
@@ -186,6 +194,7 @@ namespace ASCOM.EqPlatformAdapter
             this.chooseMount.Enabled = enable_mount;
             this.setupMount.Enabled = enable_mount;
             this.chooseSwitch.Enabled = enable_mount;
+            this.clearSwitch.Enabled = enable_mount;
             this.setupSwitch.Enabled = enable_mount;
             this.switchIds.Enabled = enable_mount;
 
