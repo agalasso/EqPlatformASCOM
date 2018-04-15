@@ -649,10 +649,6 @@ namespace ASCOM.EqPlatformAdapter
 
         private void TransformGuidePulse(double raAmt, double decAmt, out double st4raAmt, out double st4decAmt)
         {
-            tl.LogMessage("TransformGuidePulse", String.Format("raAmt={0:F1} ms decAmt={1:F1} ms", raAmt, decAmt));
-
-            // TODO-Thomas - here is where the transformation code can go
-            //
             //  input parameters:
             //      raAmt
             //      decAmt
@@ -663,20 +659,308 @@ namespace ASCOM.EqPlatformAdapter
             //      st4decAmt
             //          pulses durations (milliseconds) to send to the mount
 
-            // scope pointing context information you may need is available as:
-            double ra = Platform.RightAscension;
-            double dec = Platform.Declination;
-            double latitude = m_mount.SiteLatitude;
-            double longitude = m_mount.SiteLongitude;
-            double lst = m_mount.SiderealTime; // local apparent sidereal time
-            double hourAngle = (lst - ra) % 24.0;
-            InitTransform(); // call this before getting alt/az
-            double altitude = transform.ElevationTopocentric;
-            double azimuth = transform.AzimuthTopocentric;
+            tl.LogMessage("TransformGuidePulse", String.Format("input raAmt={0:F1} ms decAmt={1:F1} ms", raAmt, decAmt));
 
-            // identity transform
-            st4raAmt = raAmt;
-            st4decAmt = decAmt;
+            //Input Parameters
+            double Pi = Math.PI;
+            double DegtoRad = Pi / 180;
+            double Aasc = 1;    //Right Ascension Step Angle (Deg)
+            double Adec = 1;    //Declination Step Angle (Deg)
+
+            double Lat = m_mount.SiteLatitude;      //Observation Site Latitude (Deg)
+            double Lon = m_mount.SiteLongitude;     //Observation Site Longitude (Deg)
+            double Odec = Platform.Declination;     //Object Declination (Deg)
+            double Oasc = Platform.RightAscension;  //Object Right Ascension (Deg)
+
+            InitTransform();
+            double Oalt = transform.ElevationTopocentric;   //Object Altitude (Deg)
+            double Oazm = transform.AzimuthTopocentric;     //Object Azimuth (Deg)
+
+            double hourAngle = (m_mount.SiderealTime - Platform.RightAscension) % 24.0;
+            double Olha = hourAngle;    //Object Local Hour (Deg)
+
+            //Output Parameters
+            double Altdc = 0; //Correct Dec Move Altitude
+            double Azmdc = 0; //Correct Dec Move Azimuth
+            double Altrc = 0; //Correct RA Move Altitude
+            double Azmrc = 0; //Correct RA Move Azimuth
+
+            double Naltd = 0; //Original Dec Move Altitude(Deg)
+            double Caltd = 0; //Correct Dec Move Altitude(Deg)
+            double Paltd = 0; //Adjusted Dec Move Altitude(Deg)
+            double Kaltd = 0; //Dec Move Altitude Correction (Deg)
+
+            double Nazmd = 0; //Original Dec Move Azimuth(Deg)
+            double Cazmd = 0; //Correct Dec Move Azimuth (Deg)
+            double Yaltd = 0; //Adjusted Dec Move Altitude(Deg)
+            double Pazmd = 0; //Adjusted Dec Move Azimuth (Deg)
+            double Kazmd = 0; //Dec Move Azimuth Correction (Deg)
+
+            double Nlhar = 0; //Original RA Move Local Hour (Deg)
+            double Naltr = 0; //Original RA Move Altitude (Deg)
+            double Caltr = 0; //Correct RA Move Altitude(Deg)
+            double Plhar = 0; //Adjusted RA Move Local Hour (Deg)
+            double Paltr = 0; //Adjusted RA Move Altitude(Deg)
+            double Kaltr = 0; //RA Move Altitude Correction (Deg)
+
+            double Nazmr = 0; //Original RA Move Azimuth(Deg)
+            double Cazmr = 0; //Correct RA Move Azimuth (Deg)
+            double Xlhar = 0; //Adjusted Local Hour (Deg)
+            double Xaltr = 0; //Adjusted RA Move Altitude(Deg)
+            double Pazmr = 0; //Adjusted RA Move Azimuth (Deg)
+            double Kazmr = 0; //RA Move Azimuth Correction (Deg)
+
+            double Altr = 0; //Actual RA Move Altitude
+            double Azmr = 0; //Actual Dec Move Altitude
+            double Altd = 0; //Actual RA Move Azimuth
+            double Azmd = 0; //Actual Dec Move Azimuth
+
+            //Correct Platform Altitude and Azimuth Movements
+            Altdc = Adec * Math.Cos(Oazm * Pi / 180);
+            Azmdc = Aasc * Math.Cos((Oazm + 90) * Pi / 180);
+            Altrc = Adec * Math.Sin(Oazm * Pi / 180);
+            Azmrc = Aasc * Math.Sin((Oazm + 90) * Pi / 180);
+
+            //Original, Correct, and Adjusted Declination Move Altitude (Deg)
+            Naltd = (180 / Pi) * Math.Asin(Math.Sin((Lat + Adec) * Pi / 180) * Math.Sin(Odec * Pi / 180) + 
+            Math.Cos((Lat + Adec) * Pi / 180) * Math.Cos(Odec * Pi / 180) * Math.Cos(Olha * Pi / 180));
+            Caltd = Oalt + Altdc;
+            Paltd = Oalt;
+            if (Paltd < Caltd)
+            {
+                while (Paltd < Caltd + 0.0001)
+                {
+                    Paltd = (180 / Pi) * Math.Asin(Math.Sin((Lat + Kaltd * Adec) * Pi / 180) * Math.Sin(Odec * Pi / 180) + 
+                    Math.Cos((Lat + Kaltd * Adec) * Pi / 180) * Math.Cos(Odec * Pi / 180) *  Math.Cos(Olha * Pi / 180));
+                    Kaltd = Kaltd + 0.001;
+                }
+            }
+            else
+            {
+                while (Paltd > Caltd - 0.0001)
+                {
+                    Paltd = (180 / Pi) * Math.Asin(Math.Sin((Lat + Kaltd * Adec) * Pi / 180) * Math.Sin(Odec * Pi / 180) + 
+                    Math.Cos((Lat + Kaltd * Adec) * Pi / 180) * Math.Cos(Odec * Pi / 180) * Math.Cos(Olha * Pi / 180));
+                    Kaltd = Kaltd - 0.001;
+                }
+            }
+
+            //Original, Correct, and Adjusted Declination Move Azimuth (Deg)
+            if (Olha > 12)
+            {
+                Nazmd = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin((Lat + Adec) * Pi / 180) * Math.Sin(Naltd * Pi / 180)) /
+                (Math.Cos((Lat + Adec) * Pi / 180) * Math.Cos(Naltd * Pi / 180)));
+            }
+            else
+            {
+                Nazmd = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin((Lat + Adec) * Pi / 180) * Math.Sin(Naltd * Pi / 180)) /
+                (Math.Cos((Lat + Adec) * Pi / 180) * Math.Cos(Naltd * Pi / 180)));
+            }
+            Cazmd = Oazm + Azmdc;
+            Pazmd = Oazm;
+            Yaltd = Oalt;
+            if (Pazmd < Cazmd)
+            {
+                while (Pazmd < Cazmd + 0.0001)
+                {
+                    Yaltd = (180 / Pi) * Math.Asin(Math.Sin((Lat + Kazmd * Adec) * Pi / 180) * Math.Sin(Odec * Pi / 180) + 
+                    Math.Cos((Lat + Kazmd * Adec) * Pi / 180) * Math.Cos(Odec * Pi / 180) * Math.Cos(Olha * Pi / 180));
+                    if (Olha > 12)
+                    {
+                        Pazmd = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin((Lat + Kazmd * Adec) * Pi / 180) * Math.Sin(Yaltd * Pi / 180)) / 
+                        (Math.Cos((Lat + Kazmd * Adec) * Pi / 180) * Math.Cos(Yaltd * Pi / 180)));
+                    }
+                    else
+                    {
+                        Pazmd = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin((Lat + Kazmd * Adec) * Pi / 180) * Math.Sin(Yaltd * Pi / 180)) / 
+                        (Math.Cos((Lat + Kazmd * Adec) * Pi / 180) * Math.Cos(Yaltd * Pi / 180)));
+                    }
+                    Kazmd = Kazmd + 0.001;
+                }
+            }
+            else
+            {
+                while (Pazmd > Cazmd - 0.0001)
+                    {
+                    Yaltd = (180 / Pi) * Math.Asin(Math.Sin((Lat + Kazmd * Adec) * Pi / 180) * Math.Sin(Odec * Pi / 180) + 
+                    Math.Cos((Lat + Kazmd * Adec) * Pi / 180) * Math.Cos(Odec * Pi / 180) * Math.Cos(Olha * Pi / 180));
+                    if (Olha > 12)
+                    {
+                        Pazmd = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin((Lat + Kazmd * Adec) * Pi / 180) * Math.Sin(Yaltd * Pi / 180)) / 
+                        (Math.Cos((Lat + Kazmd * Adec) * Pi / 180) * Math.Cos(Yaltd * Pi / 180)));
+                    }
+                    else
+                    {
+                        Pazmd = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin((Lat + Kazmd * Adec) * Pi / 180) * Math.Sin(Yaltd * Pi / 180)) / 
+                        (Math.Cos((Lat + Kazmd * Adec) * Pi / 180) * Math.Cos(Yaltd * Pi / 180)));
+                    }
+                    Kazmd = Kazmd - 0.001;
+                }
+            }
+
+            //Original, Correct, and Adjusted Right Ascension Move Altitude(Deg)
+            if (15 * Olha + Aasc < 360)
+            {
+                Nlhar = 15 * Olha + Aasc + 720;
+            }
+            else
+            {
+                if (15 * Olha + Aasc < 0)
+                {
+                    Nlhar = 15 * Olha + Aasc + 360;
+                }
+                else
+                {
+                    Nlhar = 15 * Olha + Aasc;
+                }
+            }
+            Naltr = (180 / Pi) * Math.Asin(Math.Sin(Lat * Pi / 180) * Math.Sin(Odec * Pi / 180) + Math.Cos(Lat * Pi / 180) * 
+            Math.Cos(Odec * Pi / 180) * Math.Cos(Nlhar * Pi / 180));
+            Caltr = Oalt + Altrc;
+            Paltr = Oalt;
+            if (Paltr < Caltr)
+            {
+                while (Paltr < Caltr + 0.0001)
+                {
+                    if (15 * Olha + Kaltr * Aasc < 360)
+                    {
+                        Plhar = 15 * Olha + Kaltr * Aasc + 720;
+                    }
+                else
+                {
+                    if (15 * Olha + Kaltr * Aasc < 0)
+                    {
+                        Plhar = 15 * Olha + Kaltr * Aasc + 360;
+                    }
+                    else
+                    {
+                        Plhar = 15 * Olha + Kaltr * Aasc;
+                    }
+                }
+                    Paltr = (180 / Pi) * Math.Asin(Math.Sin(Lat * Pi / 180) * Math.Sin(Odec * Pi / 180) + Math.Cos(Lat * Pi / 180) *
+                    Math.Cos(Odec * Pi / 180) * Math.Cos(Plhar * Pi / 180));
+                    Kaltr = Kaltr + 0.001;
+                }
+            }
+            else
+            {
+                while (Paltr > Caltr - 0.0001)
+                {
+                    if (15 * Olha + Kaltr * Aasc < 360)
+                    {
+                        Plhar = 15 * Olha + Kaltr * Aasc + 720;
+                    }
+                    else
+                    {
+                        if (15 * Olha + Kaltr * Aasc < 0)
+                        {
+                            Plhar = 15 * Olha + Kaltr * Aasc + 360;
+                        }
+                        else
+                        {
+                            Plhar = 15 * Olha + Kaltr * Aasc;
+                        }
+                    }
+                    Paltr = (180 / Pi) * Math.Asin(Math.Sin(Lat * Pi / 180) * Math.Sin(Odec * Pi / 180) + Math.Cos(Lat * Pi / 180) *
+                    Math.Cos(Odec * Pi / 180) * Math.Cos(Plhar * Pi / 180));
+                    Kaltr = Kaltr - 0.001;
+                }
+            }
+
+            //Original, Correct, and Adjusted Right Ascension Move Azimuth (Deg)
+            if (Olha > 12)
+            {
+                Nazmr = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin(Lat * Pi / 180) * Math.Sin(Naltr * Pi / 180)) / 
+                (Math.Cos(Lat * Pi / 180) * Math.Cos(Naltr * Pi / 180)));
+            }
+            else
+            {
+                Nazmr = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin(Lat * Pi / 180) * Math.Sin(Naltr * Pi / 180)) / 
+                (Math.Cos(Lat * Pi / 180) * Math.Cos(Naltr * Pi / 180)));
+            }
+            Cazmr = Oazm + Azmrc;
+            Pazmr = Nazmr;
+            if (Pazmr < Cazmr)
+            {
+                while (Pazmr < Cazmr + 0.0001)
+                {
+                    if (15 * Olha + Kazmr * Aasc < 360)
+                    {
+                        Xlhar = 15 * Olha + Kazmr * Aasc + 720;
+                    }
+                    else
+                    {
+                        if (15 * Olha + Kazmr * Aasc < 0)
+                        {
+                            Xlhar = 15 * Olha + Kazmr * Aasc + 360;
+                        }
+                        else
+                        {
+                            Xlhar = 15 * Olha + Kazmr * Aasc;
+                        }
+                    }
+                    Xaltr = (180 / Pi) * Math.Asin(Math.Sin(Lat * Pi / 180) * Math.Sin(Odec * Pi / 180) + Math.Cos(Lat * Pi / 180) *
+                    Math.Cos(Odec * Pi / 180) * Math.Cos(Xlhar * Pi / 180));
+                    if (Xlhar > 12)
+                    {
+                        Pazmr = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin(Lat * Pi / 180) * Math.Sin(Xaltr * Pi / 180)) /
+                        (Math.Cos(Lat * Pi / 180) * Math.Cos(Xaltr * Pi / 180)));
+                    }
+                    else
+                    {
+                        Pazmr = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin(Lat * Pi / 180) * Math.Sin(Xaltr * Pi /180)) / 
+                        (Math.Cos(Lat * Pi / 180) * Math.Cos(Xaltr * Pi / 180)));
+                    }
+                    Kazmr = Kazmr + 0.001;
+                }
+            }
+            else
+            {
+                while (Pazmr > Cazmr - 0.0001)
+                {
+                    if (15 * Olha + Kazmr * Aasc < 360)
+                    {
+                        Xlhar = 15 * Olha + Kazmr * Aasc + 720;
+                    }
+                    else
+                    {
+                        if (15 * Olha + Kazmr * Aasc < 0)
+                        {
+                            Xlhar = 15 * Olha + Kazmr * Aasc + 360;
+                        }
+                        else
+                        {
+                            Xlhar = 15 * Olha + Kazmr * Aasc;
+                        }
+                    }
+                    Xaltr = (180 / Pi) * Math.Asin(Math.Sin(Lat * Pi / 180) * Math.Sin(Odec * Pi / 180) + Math.Cos(Lat * Pi / 180) *
+                    Math.Cos(Odec * Pi / 180) * Math.Cos(Xlhar * Pi / 180));
+                    if (Xlhar > 12)
+                    {
+                        Pazmr = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi / 180) - Math.Sin(Lat * Pi / 180) * Math.Sin(Xaltr * Pi / 180)) /
+                        (Math.Cos(Lat * Pi / 180) * Math.Cos(Xaltr * Pi / 180)));
+                    }
+                    else
+                    {
+                        Pazmr = (180 / Pi) * Math.Acos((Math.Sin(Odec * Pi /180) - Math.Sin(Lat * Pi / 180) * Math.Sin(Xaltr * Pi / 180)) / 
+                        (Math.Cos(Lat * Pi / 180) * Math.Cos(Xaltr * Pi / 180)));
+                    }
+                    Kazmr = Kazmr - 0.001;
+                }
+            }
+
+            //Adjusted Platform Altitude and Azimuth Moves (Deg)
+
+            Altr = Paltr - Oalt;
+            Azmr = Pazmr - Oazm;
+            Altd = Paltd - Oalt;
+            Azmd = Pazmd - Oazm;
+
+            //Equatorial Mount to Equatorial Platform Motion Commands
+            st4raAmt = Kazmr * raAmt + Kazmd * decAmt;
+            st4decAmt = Kaltr * raAmt + Kaltd * decAmt;
+
+            tl.LogMessage("TransformGuidePulse", String.Format("output: st4raAmt={0:F1} ms st4decAmt={1:F1} ms", st4raAmt, st4decAmt));
         }
 
         public void PulseGuide(GuideDirections Direction, int Duration)
