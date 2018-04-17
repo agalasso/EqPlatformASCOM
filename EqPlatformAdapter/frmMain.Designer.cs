@@ -44,6 +44,7 @@ namespace ASCOM.EqPlatformAdapter
             this.mountName = new System.Windows.Forms.TextBox();
             this.switchIds = new System.Windows.Forms.ComboBox();
             this.switchDriverName = new System.Windows.Forms.TextBox();
+            this.clearSwitch = new System.Windows.Forms.Button();
             this.statusTimer = new System.Windows.Forms.Timer(this.components);
             this.topPanel = new System.Windows.Forms.Panel();
             this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
@@ -66,7 +67,6 @@ namespace ASCOM.EqPlatformAdapter
             this.groupBox4 = new System.Windows.Forms.GroupBox();
             this.setupSwitch = new System.Windows.Forms.Button();
             this.chooseSwitch = new System.Windows.Forms.Button();
-            this.clearSwitch = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.stroke)).BeginInit();
             this.topPanel.SuspendLayout();
             this.tableLayoutPanel1.SuspendLayout();
@@ -142,6 +142,17 @@ namespace ASCOM.EqPlatformAdapter
             this.switchDriverName.TabIndex = 0;
             this.toolTip1.SetToolTip(this.switchDriverName, "ASCOM Switch driver selection. Select the ASCOM driver  that controls platform tr" +
         "acking.");
+            // 
+            // clearSwitch
+            // 
+            this.clearSwitch.Location = new System.Drawing.Point(276, 19);
+            this.clearSwitch.Name = "clearSwitch";
+            this.clearSwitch.Size = new System.Drawing.Size(21, 23);
+            this.clearSwitch.TabIndex = 4;
+            this.clearSwitch.Text = "x";
+            this.toolTip1.SetToolTip(this.clearSwitch, "Clear platform switch selection");
+            this.clearSwitch.UseVisualStyleBackColor = true;
+            this.clearSwitch.Click += new System.EventHandler(this.clearSwitch_Click);
             // 
             // statusTimer
             // 
@@ -390,17 +401,6 @@ namespace ASCOM.EqPlatformAdapter
             this.chooseSwitch.UseVisualStyleBackColor = true;
             this.chooseSwitch.Click += new System.EventHandler(this.chooseSwitch_Click);
             // 
-            // clearSwitch
-            // 
-            this.clearSwitch.Location = new System.Drawing.Point(276, 19);
-            this.clearSwitch.Name = "clearSwitch";
-            this.clearSwitch.Size = new System.Drawing.Size(21, 23);
-            this.clearSwitch.TabIndex = 4;
-            this.clearSwitch.Text = "x";
-            this.toolTip1.SetToolTip(this.clearSwitch, "Clear platform switch selection");
-            this.clearSwitch.UseVisualStyleBackColor = true;
-            this.clearSwitch.Click += new System.EventHandler(this.clearSwitch_Click);
-            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -417,6 +417,7 @@ namespace ASCOM.EqPlatformAdapter
             this.Name = "MainForm";
             this.Text = "EqPlatformAdapter Driver Server";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
+            this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.MainForm_FormClosed);
             this.Load += new System.EventHandler(this.frmMain_Load);
             ((System.ComponentModel.ISupportInitialize)(this.stroke)).EndInit();
             this.topPanel.ResumeLayout(false);

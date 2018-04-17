@@ -30,11 +30,13 @@ namespace ASCOM.EqPlatformAdapter
     public partial class MainForm : Form
     {
         delegate void SetTextCallback(string text);
+        ASCOM.Utilities.TraceLogger m_tl;
 
         public MainForm()
         {
             InitializeComponent();
             expand.Text = "Settings ▼";
+            m_tl = SharedResources.GetTraceLogger();
         }
 
         private string DeviceName(string deviceType, string driverId)
@@ -263,7 +265,16 @@ namespace ASCOM.EqPlatformAdapter
 
         private void btnStart_Click(object sender, EventArgs e)
         {
-            SharedResources.s_platform.StartTracking();
+            try
+            {
+                SharedResources.s_platform.StartTracking();
+            }
+            catch (Exception ex)
+            {
+                m_tl.LogMessage("MainForm", ex.ToString());
+                string msg = String.Format("Could not start platform tracking:\n\n{0}\n\nPlease resolve the problem and try again.", ex.Message);
+                MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void btnPause_Click(object sender, EventArgs e)
@@ -310,6 +321,15 @@ namespace ASCOM.EqPlatformAdapter
             {
                 settingsPanel.Visible = true;
                 expand.Text = "▲";
+            }
+        }
+
+        private void MainForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            if (m_tl != null)
+            {
+                SharedResources.PutTraceLogger();
+                m_tl = null;
             }
         }
     }
