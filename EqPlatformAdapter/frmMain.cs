@@ -164,7 +164,16 @@ namespace ASCOM.EqPlatformAdapter
 
         private void setupMount_Click(object sender, EventArgs e)
         {
-            SharedResources.SetupMount();
+            try
+            {
+                SharedResources.SetupMount();
+            }
+            catch (Exception ex)
+            {
+                m_tl.LogMessage("MainForm", ex.ToString());
+                string msg = String.Format("Could not open telescope setup:\n\n{0}\n\nPlease resolve the problem and try again.", ex.Message);
+                MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void switchId_SelectedIndexChanged(object sender, EventArgs e)
@@ -175,12 +184,30 @@ namespace ASCOM.EqPlatformAdapter
 
         private void setupCam_Click(object sender, EventArgs e)
         {
-            SharedResources.SetupCamera();
+            try
+            {
+                SharedResources.SetupCamera();
+            }
+            catch (Exception ex)
+            {
+                m_tl.LogMessage("MainForm", ex.ToString());
+                string msg = String.Format("Could not open camera setup:\n\n{0}\n\nPlease resolve the problem and try again.", ex.Message);
+                MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void switchSetup_Click(object sender, EventArgs e)
         {
-            SharedResources.SetupSwitch();
+            try
+            {
+                SharedResources.SetupSwitch();
+            }
+            catch (Exception ex)
+            {
+                m_tl.LogMessage("MainForm", ex.ToString());
+                string msg = String.Format("Could not open switch setup:\n\n{0}\n\nPlease resolve the problem and try again.", ex.Message);
+                MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         public void UpdateState()
