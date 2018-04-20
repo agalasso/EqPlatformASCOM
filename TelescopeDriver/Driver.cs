@@ -57,7 +57,7 @@ namespace ASCOM.EqPlatformAdapter
     [ProgId("ASCOM.EqPlatformAdatper.Telescope")]
     [ServedClassName("EqPlatformAdapter Telescope")]
     [ClassInterface(ClassInterfaceType.None)]
-    public class Telescope : ReferenceCountedObjectBase, ITelescopeV3
+    public class Telescope : ReferenceCountedObjectBase, ITelescopeV3, IDisposable
     {
         /// <summary>
         /// ASCOM DeviceID (COM ProgID) for this driver.
@@ -92,6 +92,8 @@ namespace ASCOM.EqPlatformAdapter
         /// </summary>
         internal TraceLogger tl;
 
+        private bool disposed = false;
+
         private Platform Platform
         {
             get
@@ -118,7 +120,6 @@ namespace ASCOM.EqPlatformAdapter
 
             tl.LogMessage("Telescope", "Completed initialisation");
         }
-
 
         //
         // PUBLIC COM INTERFACE ITelescopeV3 IMPLEMENTATION
@@ -170,8 +171,27 @@ namespace ASCOM.EqPlatformAdapter
             return m_mount.CommandString(command, raw);
         }
 
+        ~Telescope()
+        {
+            Dispose(false);
+        }
+
         public void Dispose()
         {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        private void Dispose(bool disposing)
+        {
+            if (disposed)
+                return;
+
+            if (disposing)
+            {
+                // cleanup managed resources (none to cleanup for now)
+            }
+
             // Clean up the tracelogger and util objects
             if (m_mount != null)
             {
@@ -189,6 +209,8 @@ namespace ASCOM.EqPlatformAdapter
             astroUtilities = null;
             transform.Dispose();
             transform = null;
+
+            disposed = true;
         }
 
         public bool Connected

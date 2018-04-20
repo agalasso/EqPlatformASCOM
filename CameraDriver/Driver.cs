@@ -54,7 +54,7 @@ namespace ASCOM.EqPlatformAdapter
     [ProgId("ASCOM.EqPlatformAdatper.Camera")]
     [ServedClassName("EqPlatformAdapter Camera")]
     [ClassInterface(ClassInterfaceType.None)]
-    public class Camera : ReferenceCountedObjectBase, ICameraV2
+    public class Camera : ReferenceCountedObjectBase, ICameraV2, IDisposable
     {
         /// <summary>
         /// ASCOM DeviceID (COM ProgID) for this driver.
@@ -76,6 +76,8 @@ namespace ASCOM.EqPlatformAdapter
         /// Variable to hold the trace logger object (creates a diagnostic log file with information that you specify)
         /// </summary>
         internal TraceLogger tl;
+
+        private bool disposed = false;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EqPlatformAdapter"/> class.
@@ -141,8 +143,27 @@ namespace ASCOM.EqPlatformAdapter
             return m_camera.CommandString(command, raw);
         }
 
+        ~Camera()
+        {
+            Dispose(false);
+        }
+
         public void Dispose()
         {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        private void Dispose(bool disposing)
+        {
+            if (disposed)
+                return;
+
+            if (disposing)
+            {
+                // free managed resources here
+            }
+
             if (m_camera != null)
             {
                 SharedResources.DisconnectCamera();
@@ -151,6 +172,8 @@ namespace ASCOM.EqPlatformAdapter
 
             SharedResources.PutTraceLogger();
             tl = null;
+
+            disposed = true;
         }
 
         public bool Connected
