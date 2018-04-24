@@ -170,6 +170,14 @@ namespace ASCOM.EqPlatformAdapter
             }
         }
 
+        public double TrackingTimeElapsed
+        {
+            get
+            {
+                return m_swatch.ElapsedMilliseconds / 1000.0;
+            }
+        }
+
         public double TimeRemaining
         {
             get
