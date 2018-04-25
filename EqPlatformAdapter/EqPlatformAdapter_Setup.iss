@@ -17,7 +17,7 @@ DefaultDirName="{cf}\ASCOM\Telescope"
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 OutputDir="."
-OutputBaseFilename="EqPlatformAdapter Setup"
+OutputBaseFilename="EqPlatformAdapter_Setup"
 Compression=lzma
 SolidCompression=yes
 ; Put there by Platform if Driver Installer Support selected
