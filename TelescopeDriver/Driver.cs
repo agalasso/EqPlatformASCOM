@@ -661,6 +661,8 @@ namespace ASCOM.EqPlatformAdapter
             m_mount.MoveAxis(Axis, Rate);
         }
 
+        // another test line of code
+
         public void Park()
         {
             CheckConnected();
