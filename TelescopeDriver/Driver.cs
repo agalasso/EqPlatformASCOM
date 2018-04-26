@@ -669,6 +669,8 @@ namespace ASCOM.EqPlatformAdapter
             m_mount.Park();
         }
 
+        // this is a test line of code that I added in Visual Studio
+
         private void TransformGuidePulse(double raAmt, double decAmt, out double st4raAmt, out double st4decAmt)
         {
             
