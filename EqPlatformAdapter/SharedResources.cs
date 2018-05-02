@@ -249,6 +249,18 @@ namespace ASCOM.EqPlatformAdapter
             Server.MainForm.UpdateState();
         }
 
+        private static double norm(double val, double start, double end)
+        {
+            double range = end - start;
+            double ofs = val - start;
+            return val - Math.Floor(ofs / range) * range;
+        }
+
+        private static double norm_ra(double val)
+        {
+            return norm(val, 0.0, 24.0);
+        }
+
         public void Reset()
         {
             if (m_state == TrackingStates.AtStart)
@@ -278,9 +290,9 @@ namespace ASCOM.EqPlatformAdapter
 
             m_swatch.Stop();
 
-            double delta_ra = m_swatch.ElapsedMilliseconds / 1000.0 * SIDEREAL_DEGREES_PER_SECOND;
+            double delta_ra = m_swatch.ElapsedMilliseconds / 1000.0 * SIDEREAL_DEGREES_PER_SECOND * 24.0 / 360.0;
 
-            SharedResources.s_mount.SyncToCoordinates(ra - delta_ra, dec);
+            SharedResources.s_mount.SyncToCoordinates(norm_ra(ra - delta_ra), dec);
 
             // reset the tracking timer
             m_swatch.Reset();
