@@ -686,16 +686,18 @@ namespace ASCOM.EqPlatformAdapter
             double Adec = 0.800;    //Declination Step Angle (Deg)
             double Aasc = 0.800;    //Right Ascension Step Angle (Deg)
             double Aps = 11.000;    //Platform Start Angle (Deg)
-            double Lat = m_mount.SiteLatitude;      //Observation Site Latitude (Deg)
-            double Lon = m_mount.SiteLongitude;     //Observation Site Longitude (Deg)
-            double Lmst = m_mount.SiderealTime;     //Local Mean Sidereal Time (Hour)
-            double Tpt = 0;                         //Platform Tracking Time (Hour)
-
+            double Gmax = 5000;     //Maximum Guiding Time (mSec)
+            double Tet = Platform.TrackingTimeElapsed;  //Elapsed Tracking Time (Sec)
+            double Lat = m_mount.SiteLatitude;          //Observation Site Latitude (Deg)
+            double Lon = m_mount.SiteLongitude;         //Observation Site Longitude (Deg)
+            double Lmst = m_mount.SiderealTime;         //Local Mean Sidereal Time (Hour)
+            
             InitTransform();
             double Salt = transform.ElevationTopocentric;   //Object Altitude (Deg)
             double Sazm = transform.AzimuthTopocentric;     //Object Azimuth (Deg)
 
             //Output Parameters
+            double Tpt = 0;     //Platform Tracking Time (Min)
             double Apt = 0;     //Platform Tilt Angle (Deg)
             double Odec = 0;    //Object Declination (Deg)
             double Oasc = 0;    //Object Right Ascension (Hour)
@@ -732,7 +734,8 @@ namespace ASCOM.EqPlatformAdapter
             double Krr = 0;     //PHD RA to EQP RA Move Factor (Deg)
 
             //Platform Tilt Angle (Deg)
-            Apt = Aps - 15 * Tpt;
+            Tpt = Tet / 60;
+            Apt = Aps - Tpt * 15 / 60;
 
             //Object Declination (Deg)
             Odec = RadDeg * Math.Asin(Math.Cos(Sazm * DegRad) * Math.Cos(Lat * DegRad) * Math.Cos(Salt * DegRad) + Math.Sin(Lat * DegRad) * Math.Sin(Salt * DegRad));
@@ -817,25 +820,58 @@ namespace ASCOM.EqPlatformAdapter
             Azmr = Pazmr - Pazm;
 
             //PHD to EQP Correction Factors
-            Kdd = (Altdc * Azmr - Azmdc * Altr) / (Altd * Azmr - Azmd * Altr);
-            Kdr = (Altdc * Azmd - Azmdc * Altd) / (Altr * Azmd - Azmr * Altd);
-            Krd = (Altrc * Azmr - Azmrc * Altr) / (Altd * Azmr - Azmd * Altr);
-            Krr = (Altrc * Azmd - Azmrc * Altd) / (Altr * Azmd - Azmr * Altd);
+            if (Altd * Azmr - Azmd * Altr == 0)
+                Kdd = 0;
+            else
+                Kdd = (Altdc * Azmr - Azmdc * Altr) / (Altd * Azmr - Azmd * Altr);
+            if (Altr * Azmd - Azmr * Altd == 0)
+                Kdr = 0;
+            else
+                Kdr = (Altdc * Azmd - Azmdc * Altd) / (Altr * Azmd - Azmr * Altd);
+            if (Altd * Azmr - Azmd * Altr == 0)
+                Krd = 0;
+            else
+                Krd = (Altrc * Azmr - Azmrc * Altr) / (Altd * Azmr - Azmd * Altr);
+            if (Altr * Azmd - Azmr * Altd == 0)
+                Krr = 0;
+            else
+                Krr = (Altrc * Azmd - Azmrc * Altd) / (Altr * Azmd - Azmr * Altd);
 
             //PHD to EQP Motion Commands
             st4decAmt = Kdd * decAmt + Krd * raAmt;
             st4raAmt = Kdr * decAmt + Krr * raAmt;
+            
+            //Log Parameters
+            tl.LogMessage("TransformGuidePulse", String.Format("start log:"));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Tpt={0:F3} min Apt={1:F3} deg Apt={2:F3} deg", Tpt, Aps, Apt));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Lat={0:F3} deg Lon={1:F3} deg Salt={2:F3} deg Sazm={3:F3} deg", Lat, Lon, Salt, Sazm));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Lmst={0:F3} hour Odec={1:F3} deg Oasc={2:F3} hour", Lmst, Odec, Oasc));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Olha={0:F3} hour Oalt={1:F3} deg Oazm={2:F3} deg", Olha, Oalt, Oazm));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Plha={0:F3} hour Palt={1:F3} deg Pazm={2:F3} deg", Plha, Palt, Pazm));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Plhad={0:F3} hour Paltd={1:F3} deg Pazmd={2:F3} deg", Plhad, Paltd, Pazmd));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Plhar={0:F3} hour Paltr={1:F3} deg Pazmr={2:F3} deg", Plhar, Paltr, Pazmr));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Altdc={0:F3} deg Azmdc={1:F3} deg  Altrc={2:F3} deg Azmrc ={3:F3} deg", Altdc, Azmdc, Altrc, Azmrc));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Altd={0:F3} deg Azmd={1:F3} deg  Altr={2:F3} deg Azmr ={3:F3} deg", Altd, Azmd, Altr, Azmr));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Kdd={0:F3} Kdr={1:F3} Krd={2:F3} Krr={3:F3}", Kdd, Kdr, Krd, Krr));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F1} ms raAmt={1:F1} ms  st4decAmt={2:F1} ms st4raAmt ={3:F1} ms", decAmt, raAmt, st4decAmt, st4raAmt));
 
-            tl.LogMessage("TransformGuidePulse", String.Format("start: Tpt={0:F3} hour Apt={1:F3} deg", Tpt, Apt));
-            tl.LogMessage("TransformGuidePulse", String.Format("next: Odec={0:F3} deg Oasc={1:F3} hour Lmst={2:F3} hour", Odec, Oasc, Lmst));
-            tl.LogMessage("TransformGuidePulse", String.Format("next: Olha={0:F3} hour Oalt={1:F3} deg Oazm={2:F3} deg", Olha, Oalt, Oazm));
-            tl.LogMessage("TransformGuidePulse", String.Format("next: Plha={0:F3} hour Palt={1:F3} deg Pazm={2:F3} deg", Plha, Palt, Pazm));
-            tl.LogMessage("TransformGuidePulse", String.Format("next: Plhad={0:F3} hour Paltd={1:F3} deg Pazmd={2:F3} deg", Plhad, Paltd, Pazmd));
-            tl.LogMessage("TransformGuidePulse", String.Format("next: Plhar={0:F3} hour Paltr={1:F3} deg Pazmr={2:F3} deg", Plhar, Paltr, Pazmr));
-            tl.LogMessage("TransformGuidePulse", String.Format("next: Altdc={0:F3} deg Azmdc={1:F3} deg  Altrc={2:F3} deg Azmrc ={3:F3} deg", Altdc, Azmdc, Altrc, Azmrc));
-            tl.LogMessage("TransformGuidePulse", String.Format("next: Altd={0:F3} deg Azmd={1:F3} deg  Altr={2:F3} deg Azmr ={3:F3} deg", Altd, Azmd, Altr, Azmr));
-            tl.LogMessage("TransformGuidePulse", String.Format("next: Kdd={0:F3} Kdr={1:F3} Krd={2:F3} Krr={3:F3}", Kdd, Kdr, Krd, Krr));
-            tl.LogMessage("TransformGuidePulse", String.Format("finish: decAmt={0:F1} ms raAmt={1:F1} ms  st4decAmt={2:F1} ms st4raAmt ={3:F1} ms", decAmt, raAmt, st4decAmt, st4raAmt));
+            //Limit Command Levels
+            if (Math.Abs(st4decAmt) > Math.Abs(st4raAmt))
+            {
+                if (st4decAmt > Gmax)
+                { st4raAmt = Gmax * st4raAmt / st4decAmt; st4decAmt = Gmax; }
+                if (st4decAmt < - Gmax)
+                { st4raAmt = - Gmax * st4raAmt / st4decAmt; st4decAmt = - Gmax; }
+            }
+            else
+            {
+                if (st4raAmt > Gmax)
+                { st4decAmt = Gmax * st4decAmt / st4raAmt; st4raAmt = Gmax; }
+                if (st4raAmt < - Gmax)
+                { st4decAmt = - Gmax * st4decAmt / st4raAmt; st4raAmt = -Gmax; }
+            }
+
+            tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F1} ms raAmt={1:F1} ms  st4decAmt={2:F1} ms st4raAmt ={3:F1} ms", decAmt, raAmt, st4decAmt, st4raAmt));
 
             //End of Motion Control Adapter
         }
