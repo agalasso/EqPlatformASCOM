@@ -306,17 +306,44 @@ namespace ASCOM.EqPlatformAdapter
 
         private void btnPause_Click(object sender, EventArgs e)
         {
-            SharedResources.s_platform.StopTracking();
+            try
+            {
+                SharedResources.s_platform.StopTracking();
+            }
+            catch (Exception ex)
+            {
+                m_tl.LogMessage("MainForm", ex.ToString());
+                string msg = String.Format("Could not pause platform tracking:\n\n{0}\n\nPlease resolve the problem and try again.", ex.Message);
+                MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void btnResume_Click(object sender, EventArgs e)
         {
-            SharedResources.s_platform.ResumeTracking();
+            try
+            {
+                SharedResources.s_platform.ResumeTracking();
+            }
+            catch (Exception ex)
+            {
+                m_tl.LogMessage("MainForm", ex.ToString());
+                string msg = String.Format("Could not resume platform tracking:\n\n{0}\n\nPlease resolve the problem and try again.", ex.Message);
+                MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void btnReset_Click(object sender, EventArgs e)
         {
-            SharedResources.s_platform.Reset();
+            try
+            {
+                SharedResources.s_platform.Reset();
+            }
+            catch (Exception ex)
+            {
+                m_tl.LogMessage("MainForm", ex.ToString());
+                string msg = String.Format("Could not reset platform tracking:\n\n{0}\n\nPlease resolve the problem and try again.", ex.Message);
+                MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void cbTrace_CheckedChanged(object sender, EventArgs e)
