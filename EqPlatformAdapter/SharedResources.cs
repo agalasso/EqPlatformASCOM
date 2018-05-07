@@ -85,13 +85,25 @@ namespace ASCOM.EqPlatformAdapter
         // coordinates at the time tracking started
         double m_ra;
         double m_dec;
-        internal Stopwatch m_swatch; // elpsaed tracking time
+        internal Stopwatch m_swatch; // elapsed tracking time
 
         internal Platform()
         {
             m_swatch = new Stopwatch();
 
             Init();
+        }
+
+        internal string Dump()
+        {
+            return this.IsTracking ?
+                String.Format("Platform state = {0} RA = {1:F4} Dec = {2:F3} Elapsed = {3:F1} Rem = {4:F1}",
+                    m_state.ToString(),
+                    m_ra, m_dec,
+                    this.TrackingTimeElapsed, this.TimeRemaining) :
+                String.Format("Platform state = {0} RA = ? Dec = ? Elapsed = {1:F1} Rem = {2:F1}",
+                    m_state.ToString(),
+                    this.TrackingTimeElapsed, this.TimeRemaining);
         }
 
         public void Init()

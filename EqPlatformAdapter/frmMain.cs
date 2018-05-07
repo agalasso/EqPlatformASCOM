@@ -277,7 +277,9 @@ namespace ASCOM.EqPlatformAdapter
 
             if (platform.TimeRemaining <= 0.0)
             {
+                m_tl.LogMessage("MainForm", "Platform completed travel");
                 platform.StopTracking(); // will update state
+                LogState("Platform tracking stopped");
                 return;
             }
 
@@ -290,11 +292,19 @@ namespace ASCOM.EqPlatformAdapter
             settings.Set("strokeDegrees", String.Format("{0:F1}", stroke.Value));
         }
 
+        private void LogState(string msg)
+        {
+            if (m_tl.Enabled)
+                m_tl.LogMessage("MainForm", msg + "; " + SharedResources.s_platform.Dump());
+        }
+
         private void btnStart_Click(object sender, EventArgs e)
         {
+            m_tl.LogMessage("MainForm", "Start button clicked");
             try
             {
                 SharedResources.s_platform.StartTracking();
+                LogState("Platform tracking started");
             }
             catch (Exception ex)
             {
@@ -306,9 +316,11 @@ namespace ASCOM.EqPlatformAdapter
 
         private void btnPause_Click(object sender, EventArgs e)
         {
+            m_tl.LogMessage("MainForm", "Pause button clicked");
             try
             {
                 SharedResources.s_platform.StopTracking();
+                LogState("Platform tracking stopped");
             }
             catch (Exception ex)
             {
@@ -320,9 +332,11 @@ namespace ASCOM.EqPlatformAdapter
 
         private void btnResume_Click(object sender, EventArgs e)
         {
+            m_tl.LogMessage("MainForm", "Resume button clicked");
             try
             {
                 SharedResources.s_platform.ResumeTracking();
+                LogState("Platform tracking resumed");
             }
             catch (Exception ex)
             {
@@ -334,9 +348,11 @@ namespace ASCOM.EqPlatformAdapter
 
         private void btnReset_Click(object sender, EventArgs e)
         {
+            m_tl.LogMessage("MainForm", "Reset button clicked");
             try
             {
                 SharedResources.s_platform.Reset();
+                LogState("Platform reset done");
             }
             catch (Exception ex)
             {
