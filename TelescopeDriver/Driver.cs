@@ -686,7 +686,6 @@ namespace ASCOM.EqPlatformAdapter
             double Adec = 0.800;    //Declination Step Angle (Deg)
             double Aasc = 0.800;    //Right Ascension Step Angle (Deg)
             double Aps = 11.000;    //Platform Start Angle (Deg)
-            double Gmax = 1000;     //Maximum Guiding Time (mSec)
             double Tet = Platform.TrackingTimeElapsed;  //Elapsed Tracking Time (Sec)
             double Lat = m_mount.SiteLatitude;          //Observation Site Latitude (Deg)
             double Lon = m_mount.SiteLongitude;         //Observation Site Longitude (Deg)
@@ -736,6 +735,8 @@ namespace ASCOM.EqPlatformAdapter
             double Kdr = 0;     //PHD Dec to EQP RA Move Factor (Deg)
             double Krd = 0;     //PHD RA to EQP Dec Move Factor (Deg)
             double Krr = 0;     //PHD RA to EQP RA Move Factor (Deg)
+
+            double Gmax = 0;    //Maximum Guiding Time (mSec)
 
             //Platform Tilt Angle (Deg)
             Tpt = Tet / 60;
@@ -881,6 +882,10 @@ namespace ASCOM.EqPlatformAdapter
             tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms  st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
 
             //Limit Command Levels
+            if (Math.Abs(decAmt) > Math.Abs(raAmt))
+                Gmax = Math.Abs(decAmt) + 1000;
+            else
+                Gmax = Math.Abs(raAmt) + 1000;
             if (Math.Abs(st4decAmt) > Math.Abs(st4raAmt))
             {
                 if (st4decAmt > Gmax)
