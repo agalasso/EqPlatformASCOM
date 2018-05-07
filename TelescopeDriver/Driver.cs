@@ -695,8 +695,8 @@ namespace ASCOM.EqPlatformAdapter
             double Pasc = Platform.RightAscension;      //Platform Right Ascension (Hour)
 
             InitTransform();
-            double Salt = transform.ElevationTopocentric;   //Object Altitude (Deg)
-            double Sazm = transform.AzimuthTopocentric;     //Object Azimuth (Deg)
+            double Oalt = transform.ElevationTopocentric;   //Object Initial Altitude (Deg)
+            double Oazm = transform.AzimuthTopocentric;     //Object Initial Azimuth (Deg)
 
             //Output Parameters
             double Tpt = 0;     //Platform Tracking Time (Min)
@@ -706,8 +706,9 @@ namespace ASCOM.EqPlatformAdapter
             double Oasc = 0;    //Object Right Ascension (Hour)
 
             double Olha = 0;    //Object Actual Local Hour (Hour)
-            double Oalt = 0;    //Object Actual Altitude (Deg)
-            double Oazm = 0;    //Object Actual Azimuth (Deg)
+            double Slha = 0;    //Scope Initial Local Hour (Hour)
+            double Salt = 0;    //Scope Initial Altitude (Deg)
+            double Sazm = 0;    //Scope Initial Azimuth (Deg)
 
             double Plha = 0;    //Platform Initial Local Hour (Hour)
             double Palt = 0;    //Platform Initial Altitude (Deg)
@@ -750,30 +751,40 @@ namespace ASCOM.EqPlatformAdapter
             { Gmst = Lmst - Lon / 15; }
 
             //Object Declination (Deg)
-            Odec = RadDeg * Math.Asin(Math.Cos(Sazm * DegRad) * Math.Cos(Lat * DegRad) * Math.Cos(Salt * DegRad) + Math.Sin(Lat * DegRad) * Math.Sin(Salt * DegRad));
+            Odec = RadDeg * Math.Asin(Math.Cos(Oazm * DegRad) * Math.Cos(Lat * DegRad) * Math.Cos(Oalt * DegRad) + Math.Sin(Lat * DegRad) * Math.Sin(Oalt * DegRad));
 
             //Object Right Ascension (Deg)
-            if (Sazm < 180)
-            { Oasc = Lmst + Aps / 15 + (12 / Pi) * Math.Acos((Math.Sin(Salt * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad))); }
+            if (Oazm < 180)
+            { Oasc = Lmst + (12 / Pi) * Math.Acos((Math.Sin(Oalt * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad))); }
             else
-            { Oasc = Lmst + Aps / 15 - (12 / Pi) * Math.Acos((Math.Sin(Salt * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad))); }
+            { Oasc = Lmst - (12 / Pi) * Math.Acos((Math.Sin(Oalt * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad))); }
             if (Oasc > 24) Oasc = Oasc - 24;
+            if (Oasc < 0) Oasc = Oasc + 24;
 
-            //Object Actual Local Hour, Altitude, Azimuth Angles (Deg)
+            //Object Actual Local Hour (Hour)
             if (Lmst - Oasc > 24)
             { Olha = Lmst - Oasc - 24; }
             else
                 if (Lmst - Oasc < 0)
-                { Olha = Lmst - Oasc + 24; }
-                else
-                { Olha = Lmst - Oasc; }
-
-            Oalt = RadDeg * Math.Asin(Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad) + Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad) * Math.Cos(15 * Olha * DegRad));
-
-            if (Olha > 12)
-            { Oazm = RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Oalt * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Oalt * DegRad))); }
+            { Olha = Lmst - Oasc + 24; }
             else
-            { Oazm = 360 - RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Oalt * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Oalt * DegRad))); }
+            { Olha = Lmst - Oasc; }
+
+            //Scope Initial Local Hour, Altitude, Azimuth (Deg)
+            if (Lmst - Oasc + Aps / 15 > 24)
+            { Slha = Lmst - Oasc + Aps / 15 - 24; }
+            else
+                if (Lmst - Oasc + Aps / 15 < 0)
+            { Slha = Lmst - Oasc + Aps / 15 + 24; }
+            else
+            { Slha = Lmst - Oasc + Aps / 15; }
+
+            Salt = RadDeg * Math.Asin(Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad) + Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad) * Math.Cos(15 * Slha * DegRad));
+
+            if (Slha > 12)
+            { Sazm = RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Salt * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Salt * DegRad))); }
+            else
+            { Sazm = 360 - RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Salt * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Salt * DegRad))); }
 
             //Platform Initial Local Hour, Altitude, Azimuth Angles (Deg)
             if (Lmst - Oasc + Aps/15 > 24)
@@ -856,7 +867,7 @@ namespace ASCOM.EqPlatformAdapter
             
             //Log Parameters
             tl.LogMessage("TransformGuidePulse", String.Format("start log:"));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Tpt={0:F3} min Aps={1:F3} deg Apt={2:F3} deg", Tpt, Aps, Apt));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Tpt={0:F3} min Aps={1:F3} deg Lat={2:F3} deg Lon={3:F3} deg", Tpt, Apt, Lat, Lon));
             tl.LogMessage("TransformGuidePulse", String.Format("log: Lmst={0:F3} hour Pdec={1:F3} dec Pasc={2:F3} hour", Lmst, Pdec, Pasc));
             tl.LogMessage("TransformGuidePulse", String.Format("log: Gmst={0:F3} hour Odec={1:F3} deg Oasc={2:F3} hour", Gmst, Odec, Oasc));
             tl.LogMessage("TransformGuidePulse", String.Format("log: Olha={0:F3} hour Oalt={1:F3} deg Oazm={2:F3} deg", Olha, Oalt, Oazm));
@@ -882,7 +893,7 @@ namespace ASCOM.EqPlatformAdapter
                 if (st4raAmt > Gmax)
                 { st4decAmt = Gmax * st4decAmt / st4raAmt; st4raAmt = Gmax; }
                 if (st4raAmt < - Gmax)
-                { st4decAmt = - Gmax * st4decAmt / st4raAmt; st4raAmt = -Gmax; }
+                { st4decAmt = - Gmax * st4decAmt / st4raAmt; st4raAmt = - Gmax; }
             }
 
             tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms  st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
