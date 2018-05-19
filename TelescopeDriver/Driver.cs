@@ -929,40 +929,58 @@ namespace ASCOM.EqPlatformAdapter
             double st4ra, st4dec;
             TransformGuidePulse(ra, dec, out st4ra, out st4dec);
 
-            // issue the RA pulse
+            // issue the resulting RA and Dec pulses by interleaving
 
-            GuideDirections dir;
-            if (st4ra >= 0.0)
-                dir = GuideDirections.guideEast;
-            else
-                dir = GuideDirections.guideWest;
+            GuideDirections ra_dir = st4ra >= 0.0 ? GuideDirections.guideEast : GuideDirections.guideWest;
+            GuideDirections dec_dir = st4dec >= 0.0 ? GuideDirections.guideNorth : GuideDirections.guideSouth;
 
-            int dur = (int)(Math.Abs(st4ra) + 0.5);
-            if (dur > 0)
+            int ra_tot = (int)(Math.Abs(st4ra) + 0.5);
+            int dec_tot = (int)(Math.Abs(st4dec) + 0.5);
+
+            const int nominal_pulse_ms = 20; // nominal pulse duration    TODO: make configurable?
+
+            int steps = Math.Max(1, Math.Min(ra_tot, dec_tot) / nominal_pulse_ms);
+
+            int ra_step = (ra_tot + steps - 1) / steps;
+            int dec_step = (dec_tot + steps - 1) / steps;
+
+            while (ra_tot > 0 || dec_tot > 0)
             {
-                m_camera.PulseGuide(dir, dur);
-                System.Threading.Thread.Sleep(dur + 10);
-                Stopwatch stopwatch = Stopwatch.StartNew();
-                while (m_camera.IsPulseGuiding)
                 {
-                    if (stopwatch.ElapsedMilliseconds > 5000 + dur)
-                        throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
-                    System.Threading.Thread.Sleep(10);
-                }            
-            }
+                    int ra_dur = Math.Min(ra_step, ra_tot);
+                    ra_tot -= ra_dur;
 
-            // issue the dec pulse
+                    if (ra_dur > 0)
+                    {
+                        m_camera.PulseGuide(ra_dir, ra_dur);
+                        System.Threading.Thread.Sleep(ra_dur + 10);
+                        Stopwatch stopwatch = Stopwatch.StartNew();
+                        while (m_camera.IsPulseGuiding)
+                        {
+                            if (stopwatch.ElapsedMilliseconds > 5000 + ra_dur)
+                                throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
+                            System.Threading.Thread.Sleep(10);
+                        }
+                    }
+                }
 
-            if (st4dec >= 0.0)
-                dir = GuideDirections.guideNorth;
-            else
-                dir = GuideDirections.guideSouth;
+                {
+                    int dec_dur = Math.Min(dec_step, dec_tot);
+                    dec_tot -= dec_dur;
 
-            dur = (int)(Math.Abs(st4dec) + 0.5);
-            if (dur > 0)
-            {
-                m_camera.PulseGuide(dir, dur);
-                // return right away
+                    if (dec_dur > 0)
+                    {
+                        m_camera.PulseGuide(dec_dir, dec_dur);
+                        System.Threading.Thread.Sleep(dec_dur + 10);
+                        Stopwatch stopwatch = Stopwatch.StartNew();
+                        while (m_camera.IsPulseGuiding)
+                        {
+                            if (stopwatch.ElapsedMilliseconds > 5000 + dec_dur)
+                                throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
+                            System.Threading.Thread.Sleep(10);
+                        }
+                    }
+                }
             }
         }
 
