@@ -738,7 +738,8 @@ namespace ASCOM.EqPlatformAdapter
             double Krd = 0;     //PHD RA to EQP Dec Move Factor (Deg)
             double Krr = 0;     //PHD RA to EQP RA Move Factor (Deg)
 
-            double Gmax = 0;    //Maximum Guiding Time (mSec)
+            double Cmax = 3000; //Maximum Command Limit (mSec)
+            double Gmax = 0;    //Maximum Guiding Calculation (mSec)
 
             //Platform Tilt Angle (Deg)
             Tpt = Tet / 60;
@@ -867,44 +868,41 @@ namespace ASCOM.EqPlatformAdapter
             //PHD to EQP Motion Commands
             st4decAmt = Kdd * decAmt + Krd * raAmt;
             st4raAmt = Kdr * decAmt + Krr * raAmt;
-            
+
             //Log Parameters
-            //tl.LogMessage("TransformGuidePulse", String.Format("start log:"));
+            tl.LogMessage("TransformGuidePulse", String.Format("start log:"));
             //tl.LogMessage("TransformGuidePulse", String.Format("log: Tpt={0:F3} min Aps={1:F3} deg Lat={2:F3} deg Lon={3:F3} deg", Tpt, Apt, Lat, Lon));
             //tl.LogMessage("TransformGuidePulse", String.Format("log: Lmst={0:F3} hour Pdec={1:F3} deg Pasc={2:F3} hour", Lmst, Pdec, Pasc));
             //tl.LogMessage("TransformGuidePulse", String.Format("log: Gmst={0:F3} hour Odec={1:F3} deg Oasc={2:F3} hour", Gmst, Odec, Oasc));
-            //tl.LogMessage("TransformGuidePulse", String.Format("log: Slha={0:F3} hour Salt={1:F3} deg Sazm={2:F3} deg", Plha, Salt, Sazm));
-            //tl.LogMessage("TransformGuidePulse", String.Format("log: Plha={0:F3} hour Palt={1:F3} deg Pazm={2:F3} deg", Plha, Palt, Pazm));
-            //tl.LogMessage("TransformGuidePulse", String.Format("log: Plhad={0:F3} hour Paltd={1:F3} deg Pazmd={2:F3} deg", Plhad, Paltd, Pazmd));
-            //tl.LogMessage("TransformGuidePulse", String.Format("log: Plhar={0:F3} hour Paltr={1:F3} deg Pazmr={2:F3} deg", Plhar, Paltr, Pazmr));
-            //tl.LogMessage("TransformGuidePulse", String.Format("log: Altdc={0:F3} deg Azmdc={1:F3} deg  Altrc={2:F3} deg Azmrc ={3:F3} deg", Altdc, Azmdc, Altrc, Azmrc));
-            //tl.LogMessage("TransformGuidePulse", String.Format("log: Altd={0:F3} deg Azmd={1:F3} deg  Altr={2:F3} deg Azmr ={3:F3} deg", Altd, Azmd, Altr, Azmr));
-            //tl.LogMessage("TransformGuidePulse", String.Format("log: Kdd={0:F3} Kdr={1:F3} Krd={2:F3} Krr={3:F3}", Kdd, Kdr, Krd, Krr));
-            //tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms  st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Pdec={0:F3} deg Pasc={1:F3} deg Malt={2:F3} deg Mazm={3:F3} deg", Pdec, Pasc, Malt, Mazm));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Salt={0:F3} deg Sazm={1:F3} deg Oalt={2:F3} deg Oazm={3:F3} deg", Salt, Sazm, Oalt, Oazm));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Kdd={0:F3} Kdr={1:F3} Krd={2:F3} Krr={3:F3}", Kdd, Kdr, Krd, Krr));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms  st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
 
             //Limit Command Levels
-            if (Math.Abs(decAmt) > Math.Abs(raAmt))
-                Gmax = Math.Abs(decAmt) + 1000;
-            else
-                Gmax = Math.Abs(raAmt) + 1000;
             if (Math.Abs(st4decAmt) > Math.Abs(st4raAmt))
             {
+                if (Math.Abs(st4decAmt) > Cmax)
+                    Gmax = Cmax;
+                else
+                    Gmax = Math.Abs(st4decAmt);
                 if (st4decAmt > Gmax)
                 { st4raAmt = Gmax * st4raAmt / st4decAmt; st4decAmt = Gmax; }
-                if (st4decAmt < - Gmax)
-                { st4raAmt = - Gmax * st4raAmt / st4decAmt; st4decAmt = - Gmax; }
+                if (st4decAmt < -Gmax)
+                { st4raAmt = -Gmax * st4raAmt / st4decAmt; st4decAmt = -Gmax; }
             }
             else
             {
+                if (Math.Abs(st4raAmt) > Cmax)
+                    Gmax = Cmax;
+                else
+                    Gmax = Math.Abs(st4raAmt);
                 if (st4raAmt > Gmax)
                 { st4decAmt = Gmax * st4decAmt / st4raAmt; st4raAmt = Gmax; }
-                if (st4raAmt < - Gmax)
-                { st4decAmt = - Gmax * st4decAmt / st4raAmt; st4raAmt = - Gmax; }
+                if (st4raAmt < -Gmax)
+                { st4decAmt = -Gmax * st4decAmt / st4raAmt; st4raAmt = -Gmax; }
             }
 
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Pdec={0:F3} deg Pasc={1:F3} deg Malt={2:F3} deg Mazm={3:F3} deg", Pdec, Pasc, Malt, Mazm));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Oalt={0:F3} deg Oazm={1:F3} deg Salt={2:F3} deg Sazm={3:F3} deg", Oalt, Oazm, Salt, Sazm));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Kdd={0:F3} Kdr={1:F3} Krd={2:F3} Krr={3:F3}", Kdd, Kdr, Krd, Krr));
             tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms  st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
 
             //End of Motion Control Adapter
@@ -953,6 +951,7 @@ namespace ASCOM.EqPlatformAdapter
                     if (ra_dur > 0)
                     {
                         m_camera.PulseGuide(ra_dir, ra_dur);
+                        tl.LogMessage("Output", String.Format("log: ra_dir={0:F0} ra_dur={1:F0} ms", ra_dir, ra_dur));
                         System.Threading.Thread.Sleep(ra_dur + 10);
                         Stopwatch stopwatch = Stopwatch.StartNew();
                         while (m_camera.IsPulseGuiding)
@@ -971,6 +970,7 @@ namespace ASCOM.EqPlatformAdapter
                     if (dec_dur > 0)
                     {
                         m_camera.PulseGuide(dec_dir, dec_dur);
+                        tl.LogMessage("Output", String.Format("log: dec_dir={0:F0} dec_dur={1:F0} ms", dec_dir, dec_dur));
                         System.Threading.Thread.Sleep(dec_dur + 10);
                         Stopwatch stopwatch = Stopwatch.StartNew();
                         while (m_camera.IsPulseGuiding)
