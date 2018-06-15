@@ -683,8 +683,8 @@ namespace ASCOM.EqPlatformAdapter
             double DegRad = Pi / 180;
             double RadDeg = 180 / Pi;
 
-            double Adec = 0.800;    //Declination Step Angle (Deg)
-            double Aasc = 0.800;    //Right Ascension Step Angle (Deg)
+            double Adec = 0.020;    //Declination Step Angle (Deg)
+            double Aasc = 0.020;    //Right Ascension Step Angle (Deg)
             double Aps = 11.000;    //Platform Start Angle (Deg)
             double Tet = Platform.TrackingTimeElapsed;  //Elapsed Tracking Time (Sec)
             double Lat = m_mount.SiteLatitude;          //Observation Site Latitude (Deg)
@@ -723,15 +723,19 @@ namespace ASCOM.EqPlatformAdapter
             double Paltr = 0;   //Platform RA Move Altitude(Deg)
             double Pazmr = 0;   //Platform RA Move Azimuth (Deg)
             
-            double Altdc = 0;   //Correct Dec Move Altitude Delta
-            double Azmdc = 0;   //Correct Dec Move Azimuth Delta
-            double Altrc = 0;   //Correct RA Move Altitude Delta
-            double Azmrc = 0;   //Correct RA Move Azimuth Delta
+            double Altdc = 0;   //Correct Dec Move Altitude Delta (Deg)
+            double Azmdc = 0;   //Correct Dec Move Azimuth Delta (Deg)
+            double Altrc = 0;   //Correct RA Move Altitude Delta (Deg)
+            double Azmrc = 0;   //Correct RA Move Azimuth Delta (Deg)
 
-            double Altd = 0;    //Actual Dec Move Azimuth Delta
-            double Azmd = 0;    //Actual Dec Move Azimuth Delta
-            double Altr = 0;    //Actual RA Move Altitude Delta
-            double Azmr = 0;    //Actual RA Move Azimuth Delta
+            double Altd = 0;    //Actual Dec Move Azimuth Delta (Deg)
+            double Azmd = 0;    //Actual Dec Move Azimuth Delta (Deg)
+            double Altr = 0;    //Actual RA Move Altitude Delta (Deg)
+            double Azmr = 0;    //Actual RA Move Azimuth Delta (Deg)
+
+            double Dalt = 0;      //Dec Move Angle (Deg)
+            double Dazm = 0;    //RA Move Angle (Deg)
+            double Ddr = 0;     //Dec to RA Angle (Deg) 
 
             double Kdd = 0;     //PHD Dec to EQP Dec Move Factor (Deg)
             double Kdr = 0;     //PHD Dec to EQP RA Move Factor (Deg)
@@ -865,19 +869,38 @@ namespace ASCOM.EqPlatformAdapter
             else
                 Krr = (Altrc * Azmd - Azmrc * Altd) / (Altr * Azmd - Azmr * Altd);
 
+            //Simplified Correction Factors
+            if (Azmd >= 0)
+                Dalt = (180 / Pi) * Math.Acos(Altd / Math.Sqrt(Altd * Altd + Azmd * Azmd));
+            else
+                Dalt = 360 - (180 / Pi) * Math.Acos(Altd / Math.Sqrt(Altd * Altd + Azmd * Azmd));
+            if (Azmr >= 0)
+                Dazm = (180 / Pi) * Math.Acos(Altr / Math.Sqrt(Altr * Altr + Azmr * Azmr));
+            else
+                Dazm = 360 - (180 / Pi) * Math.Acos(Altr / Math.Sqrt(Altr * Altr + Azmr * Azmr));
+
+            if (Dalt - Dazm < -180)
+                Ddr = Dalt - Dazm + 360;
+            else
+                Ddr = Dalt - Dazm;
+            Kdd = 1;
+            Kdr = 0;
+            Krd = -Math.Cos(Ddr * Pi / 180) * Math.Sqrt(Altr *Altr + Azmr * Azmr) / Aasc;
+            Krr = 1;
+
             //PHD to EQP Motion Commands
             st4decAmt = Kdd * decAmt + Krd * raAmt;
             st4raAmt = Kdr * decAmt + Krr * raAmt;
 
             //Log Parameters
-            tl.LogMessage("TransformGuidePulse", String.Format("start log:"));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Kdd={0:F3} Kdr={1:F3} Krd={2:F3} Krr={3:F3}", Kdd, Kdr, Krd, Krr));
+            //tl.LogMessage("TransformGuidePulse", String.Format("log: Odec={0:F3} deg Oasc={1:F3} hour Salt={2:F3} deg Sazm={3:F3} deg", Odec, Oasc, Salt, Sazm));
             //tl.LogMessage("TransformGuidePulse", String.Format("log: Tpt={0:F3} min Aps={1:F3} deg Lat={2:F3} deg Lon={3:F3} deg", Tpt, Apt, Lat, Lon));
             //tl.LogMessage("TransformGuidePulse", String.Format("log: Lmst={0:F3} hour Pdec={1:F3} deg Pasc={2:F3} hour", Lmst, Pdec, Pasc));
-            //tl.LogMessage("TransformGuidePulse", String.Format("log: Gmst={0:F3} hour Odec={1:F3} deg Oasc={2:F3} hour", Gmst, Odec, Oasc));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Pdec={0:F3} deg Pasc={1:F3} deg Malt={2:F3} deg Mazm={3:F3} deg", Pdec, Pasc, Malt, Mazm));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Lmst={0:F3} hour Gmst={1:F3} hour Odec={2:F3} deg Oasc={3:F3} hour", Lmst, Gmst, Odec, Oasc));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Pdec={0:F3} deg Pasc={1:F3} hour Malt={2:F3} deg Mazm={3:F3} deg", Pdec, Pasc, Malt, Mazm));
             tl.LogMessage("TransformGuidePulse", String.Format("log: Salt={0:F3} deg Sazm={1:F3} deg Oalt={2:F3} deg Oazm={3:F3} deg", Salt, Sazm, Oalt, Oazm));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Kdd={0:F3} Kdr={1:F3} Krd={2:F3} Krr={3:F3}", Kdd, Kdr, Krd, Krr));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms  st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
+            //tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms  st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
 
             //Limit Command Levels
             if (Math.Abs(st4decAmt) > Math.Abs(st4raAmt))
@@ -903,7 +926,7 @@ namespace ASCOM.EqPlatformAdapter
                 { st4decAmt = -Gmax * st4decAmt / st4raAmt; st4raAmt = -Gmax; }
             }
 
-            tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms  st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
 
             //End of Motion Control Adapter
         }
@@ -927,61 +950,106 @@ namespace ASCOM.EqPlatformAdapter
             double st4ra, st4dec;
             TransformGuidePulse(ra, dec, out st4ra, out st4dec);
 
-            // issue the resulting RA and Dec pulses by interleaving
+            // issue the RA pulse
 
-            GuideDirections ra_dir = st4ra >= 0.0 ? GuideDirections.guideEast : GuideDirections.guideWest;
-            GuideDirections dec_dir = st4dec >= 0.0 ? GuideDirections.guideNorth : GuideDirections.guideSouth;
+            GuideDirections dir;
+            if (st4ra >= 0.0)
+                dir = GuideDirections.guideEast;
+            else
+                dir = GuideDirections.guideWest;
 
-            int ra_tot = (int)(Math.Abs(st4ra) + 0.5);
-            int dec_tot = (int)(Math.Abs(st4dec) + 0.5);
-
-            const int nominal_pulse_ms = 20; // nominal pulse duration    TODO: make configurable?
-
-            int steps = Math.Max(1, Math.Min(ra_tot, dec_tot) / nominal_pulse_ms);
-
-            int ra_step = (ra_tot + steps - 1) / steps;
-            int dec_step = (dec_tot + steps - 1) / steps;
-
-            while (ra_tot > 0 || dec_tot > 0)
+            int dur = (int)(Math.Abs(st4ra) + 0.5);
+            if (dur > 0)
             {
+                m_camera.PulseGuide(dir, dur);
+                tl.LogMessage("Output", String.Format("log RA: dir={0:F0} ms dur={1:F0} ms", dir, dur));
+                System.Threading.Thread.Sleep(dur + 10);
+                Stopwatch stopwatch = Stopwatch.StartNew();
+                while (m_camera.IsPulseGuiding)
                 {
-                    int ra_dur = Math.Min(ra_step, ra_tot);
-                    ra_tot -= ra_dur;
-
-                    if (ra_dur > 0)
-                    {
-                        m_camera.PulseGuide(ra_dir, ra_dur);
-                        tl.LogMessage("Output", String.Format("log: ra_dir={0:F0} ra_dur={1:F0} ms", ra_dir, ra_dur));
-                        System.Threading.Thread.Sleep(ra_dur + 10);
-                        Stopwatch stopwatch = Stopwatch.StartNew();
-                        while (m_camera.IsPulseGuiding)
-                        {
-                            if (stopwatch.ElapsedMilliseconds > 5000 + ra_dur)
-                                throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
-                            System.Threading.Thread.Sleep(10);
-                        }
-                    }
-                }
-
-                {
-                    int dec_dur = Math.Min(dec_step, dec_tot);
-                    dec_tot -= dec_dur;
-
-                    if (dec_dur > 0)
-                    {
-                        m_camera.PulseGuide(dec_dir, dec_dur);
-                        tl.LogMessage("Output", String.Format("log: dec_dir={0:F0} dec_dur={1:F0} ms", dec_dir, dec_dur));
-                        System.Threading.Thread.Sleep(dec_dur + 10);
-                        Stopwatch stopwatch = Stopwatch.StartNew();
-                        while (m_camera.IsPulseGuiding)
-                        {
-                            if (stopwatch.ElapsedMilliseconds > 5000 + dec_dur)
-                                throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
-                            System.Threading.Thread.Sleep(10);
-                        }
-                    }
+                    if (stopwatch.ElapsedMilliseconds > 5000 + dur)
+                        throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
+                    System.Threading.Thread.Sleep(10);
                 }
             }
+
+            // issue the dec pulse
+
+            if (st4dec >= 0.0)
+                dir = GuideDirections.guideNorth;
+            else
+                dir = GuideDirections.guideSouth;
+
+            dur = (int)(Math.Abs(st4dec) + 0.5);
+            if (dur > 0)
+            {
+                m_camera.PulseGuide(dir, dur);
+                tl.LogMessage("Output", String.Format("log Dec: dir={0:F0} ms dur={1:F0} ms", dir, dur));
+                System.Threading.Thread.Sleep(dur + 10);
+                Stopwatch stopwatch = Stopwatch.StartNew();
+                while (m_camera.IsPulseGuiding)
+                {
+                    if (stopwatch.ElapsedMilliseconds > 5000 + dur)
+                        throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
+                    System.Threading.Thread.Sleep(10);
+                }
+            }
+        
+        // issue the resulting RA and Dec pulses by interleaving
+
+            //GuideDirections ra_dir = st4ra >= 0.0 ? GuideDirections.guideEast : GuideDirections.guideWest;
+            //GuideDirections dec_dir = st4dec >= 0.0 ? GuideDirections.guideNorth : GuideDirections.guideSouth;
+
+            //int ra_tot = (int)(Math.Abs(st4ra) + 0.5);
+            //int dec_tot = (int)(Math.Abs(st4dec) + 0.5);
+
+            //const int nominal_pulse_ms = 500; // nominal pulse duration    TODO: make configurable?
+
+            //int steps = Math.Max(1, Math.Min(ra_tot, dec_tot) / nominal_pulse_ms);
+
+            //int ra_step = (ra_tot + steps - 1) / steps;
+            //int dec_step = (dec_tot + steps - 1) / steps;
+            //tl.LogMessage("Output", String.Format("log: ra_tot={0:F0} ms dec_tot={1:F0} ms ra_step={2:F0} ms dec_step={3:F0} ms", ra_tot, dec_tot, ra_step, dec_step));
+            //while (ra_tot > 0 || dec_tot > 0)
+            //{
+                //{
+                    //int ra_dur = Math.Min(ra_step, ra_tot);
+                    //ra_tot -= ra_dur;
+
+                    //if (ra_dur > 0)
+                    //{
+                        //m_camera.PulseGuide(ra_dir, ra_dur);
+                        //tl.LogMessage("Output", String.Format("log: ra_dir={0:F0} ra_dur={1:F0} ms", ra_dir, ra_dur));
+                        //System.Threading.Thread.Sleep(ra_dur + 10);
+                        //Stopwatch stopwatch = Stopwatch.StartNew();
+                        //while (m_camera.IsPulseGuiding)
+                        //{
+                            //if (stopwatch.ElapsedMilliseconds > 5000 + ra_dur)
+                                //throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
+                            //System.Threading.Thread.Sleep(10);
+                        //}
+                    //}
+                //}
+
+                //{
+                    //int dec_dur = Math.Min(dec_step, dec_tot);
+                    //dec_tot -= dec_dur;
+
+                    //if (dec_dur > 0)
+                    //{
+                        //m_camera.PulseGuide(dec_dir, dec_dur);
+                        //tl.LogMessage("Output", String.Format("log: dec_dir={0:F0} dec_dur={1:F0} ms", dec_dir, dec_dur));
+                        //System.Threading.Thread.Sleep(dec_dur + 10);
+                        //Stopwatch stopwatch = Stopwatch.StartNew();
+                        //while (m_camera.IsPulseGuiding)
+                        //{
+                            //if (stopwatch.ElapsedMilliseconds > 5000 + dec_dur)
+                                //throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
+                            //System.Threading.Thread.Sleep(10);
+                        //}
+                    //}
+                //}
+            //}
         }
 
         public double RightAscension
