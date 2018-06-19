@@ -678,6 +678,7 @@ namespace ASCOM.EqPlatformAdapter
             
             // Start of Motion Control Adapter
 
+
             //Input Parameters
             double Pi = Math.PI;
             double DegRad = Pi / 180;
