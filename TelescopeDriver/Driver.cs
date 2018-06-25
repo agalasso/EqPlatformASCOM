@@ -963,7 +963,7 @@ namespace ASCOM.EqPlatformAdapter
             if (dur > 0)
             {
                 m_camera.PulseGuide(dir, dur);
-                tl.LogMessage("Output", String.Format("log RA: dir={0:F0} ms dur={1:F0} ms", dir, dur));
+                tl.LogMessage("TransformGuidePulse", String.Format("log: dir={0:F0} ms dur={1:F0} ms", dir, dir));
                 System.Threading.Thread.Sleep(dur + 10);
                 Stopwatch stopwatch = Stopwatch.StartNew();
                 while (m_camera.IsPulseGuiding)
@@ -985,7 +985,7 @@ namespace ASCOM.EqPlatformAdapter
             if (dur > 0)
             {
                 m_camera.PulseGuide(dir, dur);
-                tl.LogMessage("Output", String.Format("log Dec: dir={0:F0} ms dur={1:F0} ms", dir, dur));
+                tl.LogMessage("TransformGuidePulse", String.Format("log: dir={0:F0} ms dur={1:F0} ms", dir, dir));
                 System.Threading.Thread.Sleep(dur + 10);
                 Stopwatch stopwatch = Stopwatch.StartNew();
                 while (m_camera.IsPulseGuiding)
