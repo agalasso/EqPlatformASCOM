@@ -678,15 +678,14 @@ namespace ASCOM.EqPlatformAdapter
             
             // Start of Motion Control Adapter
 
-
             //Input Parameters
             double Pi = Math.PI;
             double DegRad = Pi / 180;
             double RadDeg = 180 / Pi;
 
-            double Adec = 0.020;    //Declination Step Angle (Deg)
+            double Adec = - 0.020;  //Declination Step Angle (Deg)
             double Aasc = 0.020;    //Right Ascension Step Angle (Deg)
-            double Aps = 11.000;    //Platform Start Angle (Deg)
+            double Aps = 9.000;     //Platform Start Angle (Deg)
             double Tet = Platform.TrackingTimeElapsed;  //Elapsed Tracking Time (Sec)
             double Lat = m_mount.SiteLatitude;          //Observation Site Latitude (Deg)
             double Lon = m_mount.SiteLongitude;         //Observation Site Longitude (Deg)
@@ -735,8 +734,7 @@ namespace ASCOM.EqPlatformAdapter
             double Azmr = 0;    //Actual RA Move Azimuth Delta (Deg)
 
             double Dalt = 0;      //Dec Move Angle (Deg)
-            double Dazm = 0;    //RA Move Angle (Deg)
-            double Ddr = 0;     //Dec to RA Angle (Deg) 
+            double Dazm = 0;    //RA Move Angle (Deg) 
 
             double Kdd = 0;     //PHD Dec to EQP Dec Move Factor (Deg)
             double Kdr = 0;     //PHD Dec to EQP RA Move Factor (Deg)
@@ -871,23 +869,29 @@ namespace ASCOM.EqPlatformAdapter
                 Krr = (Altrc * Azmd - Azmrc * Altd) / (Altr * Azmd - Azmr * Altd);
 
             //Simplified Correction Factors
-            if (Azmd >= 0)
-                Dalt = (180 / Pi) * Math.Acos(Altd / Math.Sqrt(Altd * Altd + Azmd * Azmd));
+            if (Azmd == 0)
+                Dalt = 270;
+            if (Azmd > 0)
+                Dalt = 180 - (180 / Pi) * Math.Atan(Altd / Azmd);
             else
-                Dalt = 360 - (180 / Pi) * Math.Acos(Altd / Math.Sqrt(Altd * Altd + Azmd * Azmd));
-            if (Azmr >= 0)
-                Dazm = (180 / Pi) * Math.Acos(Altr / Math.Sqrt(Altr * Altr + Azmr * Azmr));
+                if ((180 / Pi) * Math.Atan(Altd / Azmd) > 0)
+                    Dalt = 360 - (180 / Pi) * Math.Atan(Altd / Azmd);
+                else
+                    Dalt = - (180 / Pi) * Math.Atan(Altd / Azmd);
+            if (Azmr == 0)
+                Dazm = 270;
+            if (Azmr > 0)
+                Dazm = 180 - (180 / Pi) * Math.Atan(Altr / Azmr);
             else
-                Dazm = 360 - (180 / Pi) * Math.Acos(Altr / Math.Sqrt(Altr * Altr + Azmr * Azmr));
+                if ((180 / Pi) * Math.Atan(Altr / Azmr) > 0)
+                Dazm = 360 - (180 / Pi) * Math.Atan(Altr / Azmr);
+            else
+                Dazm = -(180 / Pi) * Math.Atan(Altr / Azmr);
 
-            if (Dalt - Dazm < -180)
-                Ddr = Dalt - Dazm + 360;
-            else
-                Ddr = Dalt - Dazm;
-            Kdd = 1;
+            Kdd = Math.Abs(Adec) / Math.Sqrt(Altd * Altd + Azmd * Azmd);
             Kdr = 0;
-            Krd = -Math.Cos(Ddr * Pi / 180) * Math.Sqrt(Altr *Altr + Azmr * Azmr) / Aasc;
-            Krr = 1;
+            Krd = Math.Sin((Sazm - Dazm) * Pi / 180) * Math.Abs(Aasc) * Math.Sign(Adec) / Math.Sqrt(Altd * Altd + Azmd * Azmd);
+            Krr = Math.Abs(Aasc) / Math.Sqrt(Altr * Altr + Azmr * Azmr);
 
             //PHD to EQP Motion Commands
             st4decAmt = Kdd * decAmt + Krd * raAmt;
@@ -963,7 +967,7 @@ namespace ASCOM.EqPlatformAdapter
             if (dur > 0)
             {
                 m_camera.PulseGuide(dir, dur);
-                tl.LogMessage("TransformGuidePulse", String.Format("log: dir={0:F0} ms dur={1:F0} ms", dir, dir));
+                tl.LogMessage("TransformGuidePulse", String.Format("log: dir={0} dur={1} ms Tet={2:F3} sec", dir, dur, Platform.TrackingTimeElapsed));
                 System.Threading.Thread.Sleep(dur + 10);
                 Stopwatch stopwatch = Stopwatch.StartNew();
                 while (m_camera.IsPulseGuiding)
@@ -972,6 +976,7 @@ namespace ASCOM.EqPlatformAdapter
                         throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
                     System.Threading.Thread.Sleep(10);
                 }
+                tl.LogMessage("TransformGuidePulse", String.Format("log: dir={0} dur={1} ms Tet={2:F3} sec", dir, dur, Platform.TrackingTimeElapsed));
             }
 
             // issue the dec pulse
@@ -985,7 +990,7 @@ namespace ASCOM.EqPlatformAdapter
             if (dur > 0)
             {
                 m_camera.PulseGuide(dir, dur);
-                tl.LogMessage("TransformGuidePulse", String.Format("log: dir={0:F0} ms dur={1:F0} ms", dir, dir));
+                tl.LogMessage("TransformGuidePulse", String.Format("log: dir={0} dur={1} ms Tet={2:F3} sec", dir, dur, Platform.TrackingTimeElapsed));
                 System.Threading.Thread.Sleep(dur + 10);
                 Stopwatch stopwatch = Stopwatch.StartNew();
                 while (m_camera.IsPulseGuiding)
@@ -994,6 +999,7 @@ namespace ASCOM.EqPlatformAdapter
                         throw new ASCOM.DriverException("timed-out waiting for pulse guide to complete");
                     System.Threading.Thread.Sleep(10);
                 }
+                tl.LogMessage("TransformGuidePulse", String.Format("log: dir={0} dur={1} ms Tet={2:F3} sec", dir, dur, Platform.TrackingTimeElapsed));
             }
         
         // issue the resulting RA and Dec pulses by interleaving
