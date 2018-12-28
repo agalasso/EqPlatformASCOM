@@ -683,9 +683,9 @@ namespace ASCOM.EqPlatformAdapter
             double DegRad = Pi / 180;
             double RadDeg = 180 / Pi;
 
-            double Adec = -0.020;   //Declination Step Angle (Deg)
-            double Aasc = 0.020;    //Right Ascension Step Angle (Deg)
-            double Aps = 9.000;     //Platform Start Angle (Deg)
+            double Adec = 0.020;                        //Declination Step Angle (Deg)
+            double Aasc = 0.020;                        //Right Ascension Step Angle (Deg)
+            double Aps = 11.000;                         //Platform Start Angle (Deg)
             double Tet = Platform.TrackingTimeElapsed;  //Elapsed Tracking Time (Sec)
             double Lat = m_mount.SiteLatitude;          //Observation Site Latitude (Deg)
             double Lon = m_mount.SiteLongitude;         //Observation Site Longitude (Deg)
@@ -715,14 +715,14 @@ namespace ASCOM.EqPlatformAdapter
             double Palt = 0;    //Platform Initial Altitude (Deg)
             double Pazm = 0;    //Platform Initial Azimuth (Deg)
 
-            double Plhad = 0;    //Platform Dec Move Local Hour (Hour)
-            double Paltd = 0;    //Platform Dec Move Altitude (Deg)
-            double Pazmd = 0;    //Platform Dec Move Azimuth (Deg)
+            double Slhad = 0;    //Scope Dec Move Local Hour (Hour)
+            double Saltd = 0;    //Scope Dec Move Altitude (Deg)
+            double Sazmd = 0;    //Scope Dec Move Azimuth (Deg)
 
-            double Plhar = 0;   //Platform RA Move Local Hour (Hour)
-            double Paltr = 0;   //Platform RA Move Altitude(Deg)
-            double Pazmr = 0;   //Platform RA Move Azimuth (Deg)
-            
+            double Slhar = 0;   //Scope RA Move Local Hour (Hour)
+            double Saltr = 0;   //Scope RA Move Altitude(Deg)
+            double Sazmr = 0;   //Scope RA Move Azimuth (Deg)
+
             double Altdc = 0;   //Correct Dec Move Altitude Delta (Deg)
             double Azmdc = 0;   //Correct Dec Move Azimuth Delta (Deg)
             double Altrc = 0;   //Correct RA Move Altitude Delta (Deg)
@@ -741,7 +741,13 @@ namespace ASCOM.EqPlatformAdapter
             double Krd = 0;     //PHD RA to EQP Dec Move Factor (Deg)
             double Krr = 0;     //PHD RA to EQP RA Move Factor (Deg)
 
-            double Cmax = 3000; //Maximum Command Limit (mSec)
+            double Kddx = 0;     //PHD Dec to EQP Dec Move Factor (Deg)
+            double Kdrx = 0;     //PHD Dec to EQP RA Move Factor (Deg)
+            double Krdx = 0;     //PHD RA to EQP Dec Move Factor (Deg)
+            double Krrx = 0;     //PHD RA to EQP RA Move Factor (Deg)
+
+            double Kmax = 1.00; //Maximum Correction Factor
+            double Cmax = 2000; //Maximum Command Limit (mSec)
             double Gmax = 0;    //Maximum Guiding Calculation (mSec)
 
             //Platform Tilt Angle (Deg)
@@ -773,18 +779,30 @@ namespace ASCOM.EqPlatformAdapter
             { Olha = Lmst - Oasc - 24; }
             else
                 if (Lmst - Oasc < 0)
-            { Olha = Lmst - Oasc + 24; }
+                { Olha = Lmst - Oasc + 24; }
+                else
+                { Olha = Lmst - Oasc; }
+
+            //Platform Initial Local Hour, Altitude, Azimuth Angles (Deg)
+            Plha = Lmst - Oasc + Apt / 15;
+            if (Plha > 24)
+            { Plha = Plha - 24; }
+            if (Plha < 0)
+            { Plha = Plha + 24; }
+
+            Palt = RadDeg * Math.Asin(Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad) + Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad) * Math.Cos(15 * Plha * DegRad));
+
+            if (Plha > 12)
+            { Pazm = RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Palt * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Palt * DegRad))); }
             else
-            { Olha = Lmst - Oasc; }
+            { Pazm = 360 - RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Palt * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Palt * DegRad))); }
 
             //Scope Initial Local Hour, Altitude, Azimuth (Deg)
-            if (Lmst - Oasc + Apt / 15 > 24)
-            { Slha = Lmst - Oasc + Apt / 15 - 24; }
-            else
-                if (Lmst - Oasc + Apt / 15 < 0)
-            { Slha = Lmst - Oasc + Apt / 15 + 24; }
-            else
-            { Slha = Lmst - Oasc + Apt / 15; }
+            Slha = Lmst - Oasc + Apt / 15;
+            if (Slha > 24)
+            { Slha = Slha - 24; }
+            if (Slha < 0)
+            { Slha = Slha + 24; }
 
             Salt = RadDeg * Math.Asin(Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad) + Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad) * Math.Cos(15 * Slha * DegRad));
 
@@ -793,62 +811,41 @@ namespace ASCOM.EqPlatformAdapter
             else
             { Sazm = 360 - RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Salt * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Salt * DegRad))); }
 
-            //Platform Initial Local Hour, Altitude, Azimuth Angles (Deg)
-            if (Lmst - Oasc + Apt/15 > 24)
-            { Plha = Lmst - Oasc + Apt / 15 - 24; }
-                if(Lmst - Oasc + Apt /15 < 0)
-                { Plha = Lmst - Oasc + Apt / 15 + 24; }
-                else
-                { Plha = Lmst - Oasc + Apt / 15; }
+            //Scope Declination Move Local Hour, Altitude, Azimuth Angles (Deg)
+            Slhad = Slha;
 
-            Palt = RadDeg * Math.Asin(Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad) + Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad) * Math.Cos(15 * Plha * DegRad));
+            Saltd = RadDeg * Math.Asin(Math.Sin((Lat + Adec) * DegRad) * Math.Sin(Odec * DegRad) + Math.Cos((Lat + Adec) * DegRad) * Math.Cos(Odec * DegRad) * Math.Cos(15 * Slhad * DegRad));
 
-            if (Plha > 12)
-            { Pazm = RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Palt * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Palt * DegRad))); }
+            if (Slhad > 12)
+            { Sazmd = RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin((Lat + Adec) * DegRad) * Math.Sin(Saltd * DegRad)) / (Math.Cos((Lat + Adec) * DegRad) * Math.Cos(Saltd * DegRad))); }
             else
-            { Pazm = 360 - RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Palt * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Palt * DegRad))); }
-  
-            //Platform Declination Move Local Hour, Altitude, Azimuth Angles (Deg)
-            if (Lmst - Oasc + (Apt + Adec) / 15 > 24)
-            { Plhad = Lmst - Oasc + (Apt + Adec) / 15 - 24; }
-            if (Lmst - Oasc + (Apt + Adec) / 15 < 0)
-            { Plhad = Lmst - Oasc + (Apt + Adec) / 15 + 24; }
+            { Sazmd = 360 - RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin((Lat + Adec) * DegRad) * Math.Sin(Saltd * DegRad)) / (Math.Cos((Lat + Adec) * DegRad) * Math.Cos(Saltd * DegRad))); }
+
+            //Scope Right Ascension Move Local Hour, Altitude, Azimuth Angles (Deg)
+            Slhar = Lmst - Oasc + (Apt + Aasc) / 15;
+            if (Slhar > 24)
+            { Slhar = Slhar - 24; }
+            if (Slhar < 0)
+            { Slhar = Slhar + 24; }
+
+            Saltr = RadDeg * Math.Asin(Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad) + Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad) * Math.Cos(15 * Slhar * DegRad));
+
+            if (Slhar > 12)
+            { Sazmr = RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Saltr * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Saltr * DegRad))); }
             else
-            { Plhad = Lmst - Oasc + (Apt + Adec) / 15; }
-
-            Paltd = RadDeg * Math.Asin(Math.Sin((Lat + Adec) * DegRad) * Math.Sin(Odec * DegRad) + Math.Cos((Lat + Adec) * DegRad) * Math.Cos(Odec * DegRad) * Math.Cos(15 * Plha * DegRad));
-
-            if (Plhad > 12)
-            { Pazmd = RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin((Lat + Adec) * DegRad) * Math.Sin(Paltd * DegRad)) / (Math.Cos((Lat + Adec) * DegRad) * Math.Cos(Paltd * DegRad))); }
-            else
-            { Pazmd = 360 - RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin((Lat + Adec) * DegRad) * Math.Sin(Paltd * DegRad)) / (Math.Cos((Lat + Adec) * DegRad) * Math.Cos(Paltd * DegRad))); }
-
-            //Platform Right Ascension Move Local Hour, Altitude, Azimuth Angles (Deg)
-            if (Lmst - Oasc + (Apt + Aasc) / 15 > 24)
-            { Plhar = Lmst - Oasc + (Apt + Aasc) / 15 - 24; }
-            if (Lmst - Oasc + (Apt + Aasc) / 15 < 0)
-            { Plhar = Lmst - Oasc + (Apt + Aasc) / 15 + 24; }
-            else
-            { Plhar = Lmst - Oasc + (Apt + Aasc) / 15; }
-
-            Paltr = RadDeg * Math.Asin(Math.Sin(Lat * DegRad) * Math.Sin(Odec * DegRad) + Math.Cos(Lat * DegRad) * Math.Cos(Odec * DegRad) * Math.Cos(15 * Plhar * DegRad));
-
-            if (Plhar > 12)
-            { Pazmr = RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Paltr * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Paltr * DegRad))); }
-            else
-            { Pazmr = 360 - RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Paltr * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Paltr * DegRad))); }
+            { Sazmr = 360 - RadDeg * Math.Acos((Math.Sin(Odec * DegRad) - Math.Sin(Lat * DegRad) * Math.Sin(Saltr * DegRad)) / (Math.Cos(Lat * DegRad) * Math.Cos(Saltr * DegRad))); }
        
-            //Correct Platform Altitude and Azimuth Movements
-            Altdc = Adec * Math.Cos(Pazm * DegRad);
-            Azmdc = Adec * Math.Sin(Pazm * DegRad);
-            Altrc = Aasc * Math.Cos((Pazm - 90) * DegRad);
-            Azmrc = Aasc * Math.Sin((Pazm - 90) * DegRad);
+            //Correct Scope Altitude and Azimuth Movements
+            Altdc = Adec * Math.Cos(Sazm * DegRad);
+            Azmdc = Adec * Math.Sin(Sazm * DegRad);
+            Altrc = Aasc * Math.Cos((Sazm - 90) * DegRad);
+            Azmrc = Aasc * Math.Sin((Sazm - 90) * DegRad);
 
-            //Actual Platform Altitude and Azimuth Moves (Deg)
-            Altd = Paltd - Palt;
-            Azmd = Pazmd - Pazm;
-            Altr = Paltr - Palt;
-            Azmr = Pazmr - Pazm;
+            //Actual Scope Altitude and Azimuth Moves (Deg)
+            Altd = Saltd - Salt;
+            Azmd = Sazmd - Sazm;
+            Altr = Saltr - Salt;
+            Azmr = Sazmr - Sazm;
 
             //Altitude and Azimuth Move Angles (Deg)
             if (Azmd == 0)
@@ -870,7 +867,7 @@ namespace ASCOM.EqPlatformAdapter
             else
                 Dazm = -(180 / Pi) * Math.Atan(Altr / Azmr);
 
-            //Exact PHD to EQP Correction Factors
+            //PHD to EQP Correction Factors
             if (Altd * Azmr - Azmd * Altr == 0)
                 Kdd = 0;
             else
@@ -888,24 +885,14 @@ namespace ASCOM.EqPlatformAdapter
             else
                 Krr = (Altrc * Azmd - Azmrc * Altd) / (Altr * Azmd - Azmr * Altd);
 
-            //Simplified PHD to EQP Correction Factors
-            //Kdd = Math.Abs(Adec) / Math.Sqrt(Altd * Altd + Azmd * Azmd);
-            //Kdr = 0;
-            //Krd = Math.Sin((Sazm - Dazm) * Pi / 180) * Math.Abs(Aasc) * Math.Sign(Adec) / Math.Sqrt(Altd * Altd + Azmd * Azmd);
-            //Krr = Math.Abs(Aasc) / Math.Sqrt(Altr * Altr + Azmr * Azmr);
+            //Limit Correction Factors
+            Kddx = Kdd * Math.Min(1, Math.Min(Kmax / Math.Abs(Kdd), Kmax / Math.Abs(Kdr)));
+            Kdrx = Kdr * Math.Min(1, Math.Min(Kmax / Math.Abs(Kdd), Kmax / Math.Abs(Kdr)));
+            Krdx = Krd * Math.Min(1, Math.Min(Kmax / Math.Abs(Krd), Kmax / Math.Abs(Krr)));
+            Krrx = Krr * Math.Min(1, Math.Min(Kmax / Math.Abs(Krd), Kmax / Math.Abs(Krr)));
 
-            //PHD to EQP Motion Commands
-            st4decAmt = Kdd * decAmt + Krd * raAmt;
-            st4raAmt = Kdr * decAmt + Krr * raAmt;
-
-            //Log Parameters
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Lmst={0:F3} hour Apt={1:F3} deg Tet={2:F3} sec", Lmst, Apt, Tet));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Odec={0:F3} deg Oasc={1:F3} hour Olha={2:F3} hour Slha={3:F3} hour", Odec, Oasc, Olha, Slha));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Pdec={0:F3} deg Pasc={1:F3} hour Malt={2:F3} deg Mazm={3:F3} deg", Pdec, Pasc, Malt, Mazm));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Salt={0:F3} deg Sazm={1:F3} deg Oalt={2:F3} deg Oazm={3:F3} deg", Salt, Sazm, Oalt, Oazm));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Altdc={0:F4} hour Azmdc={1:F4} Altrc={2:F4} Azmrc={3:F4}", Altdc, Azmdc, Altrc, Azmrc));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Altd={0:F4} hour Azmd={1:F4} Altr={2:F4} Azmr={3:F4}", Altd, Azmd, Altr, Azmr));
-            tl.LogMessage("TransformGuidePulse", String.Format("log: Kdd={0:F3} Kdr={1:F3} Krd={2:F3} Krr={3:F3}", Kdd, Kdr, Krd, Krr));
+            st4decAmt = Kddx * decAmt + Krdx * raAmt;
+            st4raAmt = Kdrx * decAmt + Krrx * raAmt;
             
             //Limit Command Levels
             if (Math.Abs(st4decAmt) > Math.Abs(st4raAmt))
@@ -931,6 +918,17 @@ namespace ASCOM.EqPlatformAdapter
                 { st4decAmt = -Gmax * st4decAmt / st4raAmt; st4raAmt = -Gmax; }
             }
 
+            //Log Parameters
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Lmst={0:F3} hour Apt={1:F3} deg Tet={2:F3} sec", Lmst, Apt, Tet));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Pdec={0:F3} deg Pasc={1:F3} hour Odec={2:F3} deg Oasc={3:F3} hour", Pdec, Pasc, Odec, Oasc));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Malt={0:F3} deg Mazm={1:F3} deg Oalt={2:F3} deg Oazm={3:F3} deg", Malt, Mazm, Oalt, Oazm));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Plha={0:F3} hour Slha={1:F3} hour Slhad={2:F3} hour Slhar={3:F3} hour", Plha, Slha, Slhad, Slhar));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Palt={0:F3} deg Salt={1:F3} deg Saltd={2:F3} deg Saltr={3:F3} deg", Palt, Salt, Saltd, Saltr));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Pazm={0:F3} deg Sazm={1:F3} deg Sazmd={2:F3} deg Sazmr={3:F3} deg", Pazm, Sazm, Sazmd, Sazmr));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Altdc={0:F4} hour Azmdc={1:F4} Altrc={2:F4} Azmrc={3:F4}", Altdc, Azmdc, Altrc, Azmrc));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Altd={0:F4} hour Azmd={1:F4} Altr={2:F4} Azmr={3:F4}", Altd, Azmd, Altr, Azmr));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Kdd={0:F3} Kdr={1:F3} Krd={2:F3} Krr={3:F3}", Kdd, Kdr, Krd, Krr));
+            tl.LogMessage("TransformGuidePulse", String.Format("log: Kddx={0:F3} Kdrx={1:F3} Krdx={2:F3} Krrx={3:F3}", Kddx, Kdrx, Krdx, Krrx));
             tl.LogMessage("TransformGuidePulse", String.Format("log: decAmt={0:F0} ms raAmt={1:F0} ms st4decAmt={2:F0} ms st4raAmt ={3:F0} ms", decAmt, raAmt, st4decAmt, st4raAmt));
 
             //End of Motion Control Adapter
